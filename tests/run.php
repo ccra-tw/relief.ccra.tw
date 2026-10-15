@@ -379,6 +379,61 @@ ok(closure_review($WK, $cid, 'approve', '') !== null, '審核意見必填');
 ok(closure_review($WK, $cid, 'approve', '同意結案') === null, '本區社工審核通過');
 ok(app_row($app5)['status'] === 'closed' && app_row($app5)['closed_at'] === date('Y-m-d', strtotime('-3 days')), '結案日＝教會送出結案報告那天（不是審核那天）');
 
+echo "撥款批次（#8）\n";
+// 直接造兩個已通過的案子（審核流程前面已測過）：甲在區辦 1（兩期）、乙在區辦 2（一期）
+ok(church_bind($W2, '900002', $aB) === null, '區辦 2 綁定第二間教會');
+$ins->execute([null, 'peace-staff', password_hash('x', PASSWORD_DEFAULT), '測試平安同工', 'church_staff', null]);
+$db->exec("UPDATE app_user SET church_oid='900002' WHERE username='peace-staff'");
+$PS = load_user('username', 'peace-staff');
+[$pa] = app_save($CS, $good + ['idno' => fake_id('F20202020'), 'applicant_phone' => '1']);
+[$pb] = app_save($PS, $good + ['idno' => fake_id('F21212121'), 'applicant_phone' => '1']);
+$db->exec("UPDATE application SET status='approved', opened_at=current_date, case_no='T1-A-2026-0901' WHERE id=$pa");
+$db->exec("UPDATE application SET status='approved', opened_at=current_date, case_no='T2-B-2026-0902' WHERE id=$pb");
+$db->exec("INSERT INTO installment (application_id, seq, amount, set_stage, set_by) VALUES ($pa,1,6000,'hq',{$WK['id']}),($pa,2,4000,'hq',{$WK['id']}),($pb,1,7000,'hq',{$W2['id']})");
+ok(str_contains((string)church_account_set($WK, '900001', ['bank_name' => '測試銀行', 'bank_code' => '013', 'branch_code' => '0001', 'account_no' => '12-34', 'account_name' => '測試恩典教會']), '只能是數字'), '帳號含非數字會被擋（需求 0004）');
+ok(church_account_set($WK, '900001', ['bank_name' => '測試銀行', 'bank_code' => '013', 'branch_code' => '0001', 'account_no' => ' 1234 5678 ', 'account_name' => '測試恩典教會']) === null
+   && $db->query("SELECT account_no FROM church WHERE oid='900001'")->fetchColumn() === '12345678', '帳號自動去空白後存純數字');
+ok(church_account_set($WK, '900002', ['bank_name' => 'x', 'bank_code' => '1', 'branch_code' => '1', 'account_no' => '1', 'account_name' => 'x']) !== null, '區辦不能設定別區教會的帳戶');
+church_account_set($W2, '900002', ['bank_name' => '測試銀行', 'bank_code' => '013', 'branch_code' => '0002', 'account_no' => '87654321', 'account_name' => '測試平安教會']);
+$ub = array_column(array_filter(unbatched(), fn($x) => in_array((int)$x['application_id'], [$pa, $pb], true)), 'seq', 'application_id');
+ok($ub === [$pa => 1, $pb => 1], '未產出批次：每案只放下一期（甲第 1 期、乙第 1 期）');
+ok(batch_create($WK)[1] !== null, '區辦不能產出批次');
+$HQW = load_user('email', 'hq@example.test');
+[$bid, $e] = batch_create($HQW);
+ok($bid && !$e, '服管組產出暫存批次');
+$t = batch_totals($bid);
+$sumItems = (int)$db->query("SELECT sum(amount) FROM installment WHERE batch_id=$bid")->fetchColumn();
+ok($t['total'] === $sumItems && array_sum($t['regions']) === $t['total'], '批次合計＝明細加總＝各區小計加總（' . $t['total'] . ' 元）');
+$itA = (int)$db->query("SELECT id FROM installment WHERE application_id=$pa AND seq=1")->fetchColumn();
+$itB = (int)$db->query("SELECT id FROM installment WHERE application_id=$pb AND seq=1")->fetchColumn();
+ok(batch_region_act($WK, $itB, 'confirm') !== null, '區辦不能確認別區的項目');
+ok(batch_region_act($W2, $itB, 'withdraw') === null && in_array($itB, array_column(unbatched(), 'id'), true), '區辦退出批次 → 回到未產出批次');
+ok(str_contains((string)batch_send($HQW, $bid), '尚未確認'), '區辦還沒確認不能送會計');
+foreach (batch_items($bid) as $bi) batch_region_act((int)$bi['region_id'] === 1 ? $WK : $W2, (int)$bi['id'], 'confirm');   // 前面測試留下的其他已通過案也在批次裡
+ok((bool)$db->query("SELECT region_confirmed FROM installment WHERE id=$itA")->fetchColumn() && batch_send($HQW, $bid) === null, '各區確認後服管組送會計');
+ok(batch_region_act($WK, $itA, 'withdraw') !== null, '送出後區辦不能再退出');
+ok(batch_export_csv($CS, $bid)[1] !== null, '教會不能匯出匯款清單');
+$ins->execute([null, 'cashier1', password_hash('x', PASSWORD_DEFAULT), '測試出納', 'cashier', null]);
+$ins->execute([null, 'acct1', password_hash('x', PASSWORD_DEFAULT), '測試會計', 'accountant', null]);
+$CA = load_user('username', 'cashier1'); $AC = load_user('username', 'acct1');
+$nExp = (int)$db->query("SELECT count(*) FROM audit_log WHERE action='export' AND target_type='batch'")->fetchColumn();
+[$csv] = batch_export_csv($CA, $bid);
+ok(str_contains($csv, '匯款清單') && str_contains($csv, '12345678') && str_contains($csv, '6000') && !str_contains($csv, '87654321'), '匯款清單含帳號金額，退出的項目不在內');
+ok((int)$db->query("SELECT count(*) FROM audit_log WHERE action='export' AND target_type='batch'")->fetchColumn() === $nExp + 1, '匯出寫 audit_log');
+ok(batch_paid($AC, $bid, date('Y-m-d')) !== null, '會計不能標記匯款成功（由出納）');
+$nN = (int)$db->query("SELECT count(*) FROM notification")->fetchColumn();
+ok(batch_paid($CA, $bid, date('Y-m-d')) === null, '出納標記匯款成功');
+ok($db->query("SELECT paid_on FROM installment WHERE id=$itA")->fetchColumn() === date('Y-m-d') && app_row($pa)['last_paid_at'] === date('Y-m-d'), '寫入撥款日，個案記下最後撥款日');
+ok((int)$db->query("SELECT count(*) FROM notification")->fetchColumn() > $nN, '通知教會與區辦');
+$ub2 = array_column(array_filter(unbatched(), fn($x) => in_array((int)$x['application_id'], [$pa, $pb], true)), 'seq', 'application_id');
+ok($ub2 === [$pa => 2, $pb => 1], '下一輪：甲第 2 期、乙第 1 期進未產出批次');
+
+echo "領據（#8）\n";
+ok(count(array_filter(receipts_outstanding(), fn($r) => (int)$r['id'] === $itA)) === 1, '匯款後領據列為未回');
+ok(receipt_back($W2, $itA, date('Y-m-d')) !== null, '別區不能登記這一期的領據');
+ok(receipt_back($WK, $itB, date('Y-m-d')) !== null, '還沒匯款的期數不能登記領據');
+ok(receipt_back($WK, $itA, date('Y-m-d')) === null && !in_array($itA, array_column(receipts_outstanding(), 'id'), true), '區辦登記簽回後不再列為未回');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

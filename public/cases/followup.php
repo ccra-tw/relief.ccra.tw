@@ -25,6 +25,11 @@ if (isset($err['_'])) echo '<p class=err>' . h($err['_']) . '</p>';
 if (is_closed($raw)) echo '<p class=note>本案已於 ' . h($raw['closed_at']) . ' 結案，資料唯讀。</p>';
 if (($d = service_days_since($raw)) !== null) echo '<p class=note>距上次撥款或服務紀錄 ' . $d . ' 天' . ($d >= 10 ? '，請填寫服務紀錄。' : '。') . '</p>';
 
+$pi = rdb()->prepare('SELECT i.* FROM installment i JOIN application a ON a.id = i.application_id WHERE (a.id = ? OR a.parent_id = ?) AND i.paid_on IS NOT NULL ORDER BY i.paid_on, i.seq');
+$pi->execute([$a['id'], $a['id']]);
+echo '<h2>已匯款與領據</h2><table><tr><th>期數</th><th>金額</th><th>匯款日</th><th>領據</th></tr>';
+foreach ($pi as $r) echo '<tr><td>第 ' . (int)$r['seq'] . ' 期</td><td>' . number_format($r['amount']) . '</td><td>' . h($r['paid_on']) . '</td><td>' . ($r['receipt_back_on'] ? '已簽回 ' . h($r['receipt_back_on']) : '<a href="/cases/receipt.php?id=' . (int)$r['id'] . '" target=_blank>下載列印</a>（未簽回）') . '</td></tr>';
+echo '</table>';
 $sr = rdb()->prepare('SELECT s.served_at, s.data, u.display_name FROM service_record s JOIN app_user u ON u.id = s.user_id WHERE application_id = ? ORDER BY served_at DESC');
 $sr->execute([$a['id']]);
 echo '<h2>服務紀錄</h2><table><tr><th>服務時間</th><th>志工</th><th>服務方式</th></tr>';

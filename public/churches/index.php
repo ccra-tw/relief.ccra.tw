@@ -39,7 +39,7 @@ if ($found !== null) {
 }
 
 echo '<h2>已綁定的教會</h2><table><tr><th>名稱</th><th>oid</th><th>區域</th></tr>';
-foreach ($churches as $c) echo '<tr><td>' . h($c['name']) . '</td><td>' . h($c['oid']) . '</td><td>' . h("{$c['rcode']}-{$c['acode']}") . '</td></tr>';
+foreach ($churches as $c) echo '<tr><td>' . h($c['name']) . '</td><td>' . h($c['oid']) . '</td><td>' . h("{$c['rcode']}-{$c['acode']}") . '</td><td><a href="/churches/account.php?oid=' . h($c['oid']) . '">收款帳戶' . ($c['account_no'] ? '' : '（未設定）') . '</a></td></tr>';
 echo '</table>';
 
 echo "<h2>名錄新增申請（不在名錄的教會）</h2><form method=post class=card><input type=hidden name=csrf value=\"$tok\"><input type=hidden name=act value=add>";

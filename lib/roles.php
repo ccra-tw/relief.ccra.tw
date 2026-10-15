@@ -17,6 +17,7 @@ const ROLE_NAMES = [
 const MENU = [
     'cases'    => ['個案與申請', '/cases/',    ['church_staff','church_pastor','region_worker','region_head','hq_worker','hq_head','assistant','admin']],
     'review'   => ['待我審核',   '/review/',   ['church_pastor','region_worker','region_head','hq_worker','hq_head']],
+    'churches' => ['教會與帳號', '/churches/', ['region_worker','region_head','hq_worker','hq_head','admin']],
     'batches'  => ['撥款批次',   '/batches/',  ['hq_worker','hq_head','region_worker','region_head','accountant','cashier','admin']],
     'reports'  => ['報表與匯出', '/reports/',  ['hq_worker','hq_head','admin']],
     'admin'    => ['系統管理',   '/admin/',    ['admin']],

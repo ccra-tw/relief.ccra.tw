@@ -2,6 +2,7 @@
 // 自動測試（#2 骨架）。只動 schema test：RELIEF_TEST_DB=1 由本檔自己設，所有子程序也帶。
 // 用法（主機上，要讀得到 db.ini 的身分）：php tests/run.php
 putenv('RELIEF_TEST_DB=1');
+putenv('RELIEF_TEST_DIR=' . __DIR__ . '/fixtures/directory.json');   // 名錄 API 一律用假資料
 require __DIR__ . '/../lib/boot.php';
 $ROOT = realpath(__DIR__ . '/..');
 $fail = 0;
@@ -108,6 +109,42 @@ $row = $db->query("SELECT needs_cosign, cosigner_id FROM app_user WHERE id=$wId"
 ok($row['needs_cosign'] === true && (int)$row['cosigner_id'] === $headId, '指定服管組主任為固定會簽者成功');
 [$c, $o] = page('admin/users.php', 'admin@example.test', ['act' => 'add', 'display_name' => '測試新教會', 'username' => 'church-new', 'role' => 'church_staff']);
 ok(preg_match('/初始密碼（只顯示這一次）：(\S{12})/u', $o, $mm) === 1 && password_login('church-new', $mm[1]) === null, '新增教會帳號產生 12 碼初始密碼，且能用它登入');
+
+echo "教會主檔（#4）\n";
+$ins->execute(['head1@example.test', null, null, '測試北區主任', 'region_head', 1]);
+$ins->execute(['head2@example.test', null, null, '測試南區主任', 'region_head', 2]);
+$W = load_user('email', 'worker@example.test'); $H1 = load_user('email', 'head1@example.test'); $H2 = load_user('email', 'head2@example.test');
+$aA = (int)$db->query("SELECT id FROM area WHERE code='A'")->fetchColumn(); $aB = (int)$db->query("SELECT id FROM area WHERE code='B'")->fetchColumn();
+ok(count(dir_search('測試')) === 3 && dir_search('恩典')[0]['oid'] === '900001', '名錄搜尋（假資料）');
+ok(church_bind($W, '900001', $aA) === null, '區辦社工把名錄教會綁到自己區辦的區域');
+ok(str_contains((string)church_bind($W, '900002', $aB), '所屬區辦'), '不能綁到別的區辦的區域');
+ok(str_contains((string)church_bind($W, '900001', $aA), '已經綁定'), '同一個 oid 不能綁兩次（oid 為唯一鍵）');
+ok(str_contains((string)church_bind($W, '999999', $aA), '查無'), '名錄沒有的 oid 綁不了');
+ok(church_can_apply('900001') && !church_can_apply('900003'), '只有已綁定的教會可以提出急難申請');
+ok(church_add_request($W, ['name' => '測試未登錄教會', 'tel' => '00-0000000', 'city' => '測試市', 'address' => '測試路9號', 'area_id' => $aA]) === null, '不在名錄的教會送出新增申請');
+$addId = (int)$db->query("SELECT id FROM church_add_request ORDER BY id DESC LIMIT 1")->fetchColumn();
+ok(!church_can_apply('900003'), '名錄核可前仍不能申請');
+ok(church_add_approved($W, $addId, '900003') === null && church_can_apply('900003'), '名錄核可並填回 oid 後可以申請');
+
+echo "教會帳號申請（#4）\n";
+ok(str_contains((string)account_request_create($H1, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => '測試同工', 'role' => 'church_staff']), '區辦社工提出'), '只有區辦社工能提出帳號申請');
+ok(account_request_create($W, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => '測試同工', 'role' => 'church_staff', 'email' => 'church@example.test']) === null, '區辦社工提出帳號申請');
+ok(str_contains((string)account_request_create($W, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => 'x', 'role' => 'church_staff']), '已有人使用或正在申請'), '同一帳號不能重複申請');
+$rq = (int)$db->query("SELECT id FROM account_request WHERE username='grace01'")->fetchColumn();
+[$e] = account_request_decide($H2, $rq, true);
+ok(str_contains((string)$e, '該區辦主任'), '別區的主任不能核可');
+[$e] = account_request_decide($H1, $rq, false, '');
+ok(str_contains((string)$e, '原因'), '退回一定要寫原因');
+$nNoti = (int)$db->query("SELECT count(*) FROM notification")->fetchColumn();
+[$e, $pw0] = account_request_decide($H1, $rq, true);
+ok($e === null && strlen((string)$pw0) === 12 && password_login('grace01', $pw0) === null, '本區主任核可 → 開通帳號，初始密碼能登入');
+$gu = load_user('username', 'grace01');
+ok($gu['role'] === 'church_staff' && $gu['church_oid'] === '900001', '新帳號綁在該教會、角色正確');
+$notes = $db->query("SELECT to_user_id, to_email, body FROM notification ORDER BY id DESC LIMIT 2")->fetchAll();
+ok((int)$db->query("SELECT count(*) FROM notification")->fetchColumn() === $nNoti + 2, '核可寫兩筆通知（申請的社工＋教會信箱）');
+ok(!str_contains($notes[0]['body'] . $notes[1]['body'], $pw0), '初始密碼不寫進任何通知信');
+[$w] = scope_sql($gu, 'region_id', 'church_oid');
+ok($w === 'church_oid = ?', '教會帳號的可見範圍限縮到自己教會');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

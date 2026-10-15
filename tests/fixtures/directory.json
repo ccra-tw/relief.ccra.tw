@@ -1,0 +1,13 @@
+{
+ "_comment": "形狀照名錄 API 3.2 實際回應（2026-10-15 實測）：/search/ 是以 oid 為鍵的物件，只帶名稱欄位；/oid/ 是單一物件、帶地址。資料全部虛構。",
+ "search": {
+  "900001": {"oid": 900001, "ocname": "測試恩典教會", "ocnick": "", "oename": "Test Grace Church"},
+  "900002": {"oid": 900002, "ocname": "測試平安教會", "ocnick": "", "oename": "Test Peace Church"},
+  "900003": {"oid": 900003, "ocname": "測試新生教會", "ocnick": "", "oename": "Test New Life Church"}
+ },
+ "oid": {
+  "900001": {"oid": 900001, "ocname": "測試恩典教會", "city": "測試市", "town": "甲區", "address": "測試路1號"},
+  "900002": {"oid": 900002, "ocname": "測試平安教會", "city": "測試市", "town": "乙區", "address": "測試路2號"},
+  "900003": {"oid": 900003, "ocname": "測試新生教會", "city": "測試縣", "town": "丙鄉", "address": "測試路3號"}
+ }
+}

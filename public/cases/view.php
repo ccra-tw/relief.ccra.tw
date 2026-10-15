@@ -42,5 +42,15 @@ $at = rdb()->prepare('SELECT id, kind, orig_name, size FROM attachment WHERE app
 $at->execute([$a['id']]);
 foreach ($at as $f) echo '<li>' . h(ATTACH_KINDS[$f['kind']]) . '：<a href="/cases/file.php?id=' . (int)$f['id'] . '">' . h($f['orig_name']) . '</a>（' . round($f['size'] / 1024) . ' KB）</li>';
 echo '</ul>';
-if (in_array($u['role'], APPLY_ROLES, true) && !$a['submitted_at']) echo '<p><a class=btn href="/cases/new.php?id=' . (int)$a['id'] . '">編輯草稿</a></p>';
+$raw = app_row((int)$a['id']);
+if (in_array($u['role'], APPLY_ROLES, true) && in_array($raw['status'], ['draft', 'returned'], true)) {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['act'] ?? '') === 'submit') {
+        csrf_check();
+        $e = app_submit($u, (int)$a['id']);
+        echo $e ? '<p class=err>' . h($e) . '</p>' : '<p><b>已送審。</b></p>';
+        if (!$e) { page_foot(); exit; }
+    }
+    echo '<p><a class=btn href="/cases/new.php?id=' . (int)$a['id'] . '">編輯</a></p>';
+    echo '<form method=post><input type=hidden name=csrf value="' . h(csrf_token()) . '"><input type=hidden name=act value=submit><button>' . ($raw['status'] === 'returned' ? '修改完成，再次送審' : '送審') . '</button></form>';
+}
 page_foot();

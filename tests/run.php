@@ -229,6 +229,86 @@ ok(attach_add($W2, $aid, 'bogus', $tmpPng, 'x.png') !== null, '附件類別不�
 foreach ([$tmpPng, $tmpExe, $tmpBig] as $t) @unlink($t);
 array_map('unlink', glob("$UP/*") ?: []); @rmdir($UP);
 
+echo "審核四關＋會簽＋派案（#6）\n";
+$ins->execute([null, 'grace-pastor', password_hash('x', PASSWORD_DEFAULT), '測試牧者', 'church_pastor', null]);
+$db->exec("UPDATE app_user SET church_oid='900001' WHERE username='grace-pastor'");
+$PA = load_user('username', 'grace-pastor');
+$WK = load_user('email', 'worker@example.test');           // 區辦 1，須會簽（前面設定會簽者＝服管組主任）
+$HEAD = load_user('email', 'head@example.test');           // 服管組主任（會簽者）
+$W2 = load_user('email', 'worker2@example.test');          // 區辦 2（他區）
+$ID3 = fake_id('F11122233');
+[$app, $e] = app_save($CS, $good + ['idno' => $ID3, 'applicant_phone' => '02-1']);
+ok($app && !$e, '建立第二份申請');
+ok(app_submit($CS, $app) === null, '教會同工送審');
+$A = app_row($app);
+ok($A['status'] === 'pastor_review' && preg_match('/^T1-A-' . date('Y') . '-\d{4}$/', $A['case_no']), '送審即編案號 ZZ-X-YYYY-NNNN，進到教會牧者關');
+$no1 = $A['case_no'];
+ok(str_contains((string)review_act($WK, $app, 'approve', '好'), '不在您的審核關卡'), '區辦社工不能審牧者那一關');
+ok(str_contains((string)review_act($PA, $app, 'approve', ''), '意見'), '審核意見必填');
+ok(review_act($PA, $app, 'approve', '牧者同意') === null && app_row($app)['status'] === 'region_review', '牧者完成審核 → 區辦');
+ok(str_contains((string)review_act($WK, $app, 'approve', '同意'), '第一期必填'), '區辦沒配期數金額不能過（需求 0003）');
+ok(str_contains((string)review_act($WK, $app, 'approve', '同意', ['', '6000']), '第一期'), '第一期空白、只填第二期也不行');
+ok(review_act($WK, $app, 'approve', '區辦同意', ['6,000', '6000']) === null, '區辦配置兩期金額並完成審核');
+$A = app_row($app);
+ok($A['status'] === 'region_review' && (int)$A['cosign_user_id'] === (int)$HEAD['id'], '區辦社工須會簽 → 停在區辦關，等固定會簽者');
+ok(review_act($W2, $app, 'approve', 'x') !== null && review_act($WK, $app, 'approve', '再按一次') !== null, '會簽中，其他人（含原審核者）都不能動');
+ok(review_act($HEAD, $app, 'approve', '會簽同意') === null && app_row($app)['status'] === 'other_review', '會簽完成 → 他區');
+$asg = (int)$db->query("SELECT user_id FROM assignment WHERE application_id=$app AND stage='other_region'")->fetchColumn();
+ok($asg === (int)$W2['id'], '他區隨機派案，排除本區（只派到區辦 2 的社工）');
+ok(review_act($W2, $app, 'return', '') !== null, '退件原因必填');
+$nNoti = (int)$db->query("SELECT count(*) FROM notification WHERE kind='church_result'")->fetchColumn();
+ok(review_act($W2, $app, 'return', '缺證明文件') === null && app_row($app)['status'] === 'returned', '他區社工退件 → 回教會修改');
+$nChurch = (int)$db->query("SELECT count(*) FROM app_user WHERE active AND church_oid='900001' AND role IN ('church_staff','church_pastor')")->fetchColumn();
+ok($nChurch >= 2 && (int)$db->query("SELECT count(*) FROM notification WHERE kind='church_result'")->fetchColumn() === $nNoti + $nChurch, '退件通知該教會的每個帳號');
+ok(app_load($CS, $app) !== null && !array_key_exists('status', app_load($CS, $app)), '教會看得到被退的案子但看不到狀態欄');
+$ins->execute(['worker3@example.test', null, null, '測試南區社工二', 'region_worker', 2]);
+// 不靠機率：暫時把原審核者改成本案同區，讓他「不可能被隨機抽中」——這時他還被派到，只能是因為沿用原派案
+$db->exec("UPDATE app_user SET region_id = 1 WHERE id = {$W2['id']}");
+ok(app_submit($CS, $app) === null && app_row($app)['case_no'] === $no1, '修改後再送審，案號沿用');
+review_act($PA, $app, 'approve', '牧者再審');
+review_act($WK, $app, 'approve', '區辦再審', ['6000', '6000']);
+review_act($HEAD, $app, 'approve', '會簽');
+$db->exec("UPDATE app_user SET region_id = 2 WHERE id = {$W2['id']}");
+$asg2 = $db->query("SELECT user_id, count(*) OVER () AS n FROM assignment WHERE application_id=$app AND stage='other_region'")->fetch();
+ok((int)$asg2['user_id'] === (int)$W2['id'] && (int)$asg2['n'] === 1, '被退回後再送審，回到原本那位他區社工（需求 0001）');
+ok(review_act($W2, $app, 'approve', '他區同意') === null && app_row($app)['status'] === 'hq_review', '他區（不須會簽）完成 → 服管組');
+$hqId = (int)$db->query("SELECT user_id FROM assignment WHERE application_id=$app AND stage='hq'")->fetchColumn();
+$HQ = load_user('id', (string)$hqId);
+ok(in_array($HQ['role'], ['hq_worker', 'hq_head'], true), '服管組關卡隨機派給服管組社工或主任');
+ok(review_act($HQ, $app, 'approve', '總會同意', ['6000', '6000', '6000']) === null, '服管組完成審核（可調整期數）');
+$A = app_row($app);
+ok($A['status'] === 'approved' && $A['opened_at'] === date('Y-m-d'), '申請通過，開案日＝通過日');
+ok((int)$db->query("SELECT count(*) FROM installment WHERE application_id=$app")->fetchColumn() === 3, '期數以最後一關配置為準（三期）');
+ok((int)$db->query("SELECT count(*) FROM review_step WHERE application_id=$app")->fetchColumn() === 11, '每個成功的動作恰好一筆 review_step（送審 2、牧者 2、區辦 2、會簽 2、他區退件與通過 2、服管組 1）');
+
+echo "牧者自己送出、不通過（#6）\n";
+$ID4 = fake_id('F15151515');
+[$app2] = app_save($PA, $good + ['idno' => $ID4, 'applicant_phone' => '02-2']);
+ok(app_submit($PA, $app2) === null && app_row($app2)['status'] === 'region_review', '牧者自己送出 → 直接到區辦（牧者關視為完成）');
+ok(review_act($WK, $app2, 'reject', '不符資格') === null && app_row($app2)['status'] === 'rejected', '區辦不通過 → 結束');
+ok(app_submit($PA, $app2) !== null, '不通過的案子不能再送審');
+
+echo "審核修改表（#6）\n";
+$ins->execute(['rhead1@example.test', null, null, '測試區辦主任', 'region_head', 1]);
+$RH = load_user('email', 'rhead1@example.test'); $ADM = load_user('email', 'admin@example.test');
+$expect = [   // [狀態, 使用者, 期望]
+    ['draft', $CS, 'all'], ['draft', $PA, 'all'], ['draft', $WK, 'all'], ['draft', $HQ['role'] === 'hq_worker' ? $HQ : load_user('email', 'hq@example.test'), 'all'], ['draft', $RH, null],
+    ['pastor_review', $CS, 'all'], ['region_review', $CS, null], ['region_review', $WK, 'all'], ['region_review', $W2, null],
+    ['other_review', $W2, 'all'], ['other_review', load_user('email', 'worker3@example.test'), null], ['other_review', $CS, null],
+    ['hq_review', $WK, 'all'], ['hq_review', $W2, 'all'],
+    ['approved', $CS, 'basic'], ['approved', $PA, 'basic'], ['approved', $WK, 'basic'], ['approved', load_user('email', 'hq@example.test'), null], ['approved', $ADM, 'all'],
+    ['rejected', $WK, null], ['rejected', $ADM, 'all'],
+];
+$bad = [];
+foreach ($expect as [$st, $who, $want]) { $row = app_row($app); $row['status'] = $st; if (edit_level($who, $row) !== $want) $bad[] = "$st/{$who['display_name']}"; }
+ok($bad === [], '狀態 × 角色的修改權限與審核修改表一致（' . count($expect) . ' 格）' . ($bad ? '：' . implode('、', $bad) : ''));
+$e = app_update($CS, $app, ['name' => '改名後', 'mobile' => '0911 111 111', 'address' => '新地址', 'event' => '偷改內容']);
+$A = app_row($app); $D = json_decode($A['data'], true);
+ok($e === [] && $A['name'] === '改名後' && $D['mobile'] === '0911111111' && $D['event'] === '測試急難事件', '通過後教會只能改基本資料，其他欄位不會被改動');
+ok(isset(app_update(load_user('email', 'hq@example.test'), $app, $good)['_']), '通過後服管組社工不能改（審核修改表空白）');
+$actSrc = file_get_contents("$ROOT/public/review/act.php");
+ok(str_contains($actSrc, '>完成審核<') && !str_contains($actSrc, '核准'), '審核按鈕文字是「完成審核」，不用「核准」（需求 0004）');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

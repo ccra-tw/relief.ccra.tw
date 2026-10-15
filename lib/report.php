@@ -127,9 +127,10 @@ function report_rows(array $u, string $kind, array $f): array {
             $s = $db->prepare('SELECT c.*, rg.name AS rname, ar.name AS aname FROM church c JOIN area ar ON ar.id = c.area_id JOIN region rg ON rg.id = ar.region_id WHERE '
                               . implode(' AND ', $w) . ' ORDER BY rg.id, ar.id, c.name');
             $s->execute($p);
-            $head = ['編號', '大區', '小區', '教會名稱', '名錄代碼', '是否使用', '縣市', '鄉鎮區', '通訊地址', '急難備註'];
+            $head = ['編號', '大區', '小區', '教會名稱', '名錄代碼', '是否使用', '縣市', '鄉鎮區', '通訊地址', '教會電話', '教會EMAIL', '負責人', '急難備註'];
             $rows = [];
-            foreach ($s as $i => $c) $rows[] = [$i + 1, $c['rname'], $c['aname'], $c['name'], $c['oid'], $c['active'] ? '是' : '否', $c['city'], $c['town'], $c['address'], $c['relief_note']];
+            foreach ($s as $i => $c) $rows[] = [$i + 1, $c['rname'], $c['aname'], $c['name'], $c['oid'], $c['active'] ? '是' : '否', $c['city'], $c['town'], $c['address'],
+                                                 $c['tel'], $c['email'], $c['president'], $c['relief_note']];
             return [$head, $rows];
         case 'service': case 'closure':
             $isC = $kind === 'closure';

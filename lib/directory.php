@@ -48,5 +48,6 @@ function dir_add(array $f): array {
 }
 
 function dir_norm(array $c): array {
-    return ['oid' => (string)($c['oid'] ?? ''), 'name' => $c['ocname'] ?? $c['oc'] ?? '', 'city' => $c['city'] ?? '', 'town' => $c['town'] ?? '', 'address' => $c['address'] ?? ''];
+    return ['oid' => (string)($c['oid'] ?? ''), 'name' => $c['ocname'] ?? $c['oc'] ?? '', 'city' => $c['city'] ?? '', 'town' => $c['town'] ?? '', 'address' => $c['address'] ?? '',
+            'tel' => $c['tel'] ?? '', 'email' => $c['email1'] ?? '', 'president' => trim(($c['president'] ?? '') . ' ' . ($c['master_title'] ?? ''))];
 }

@@ -6,7 +6,7 @@
   "900003": {"oid": 900003, "ocname": "測試新生教會", "ocnick": "", "oename": "Test New Life Church"}
  },
  "oid": {
-  "900001": {"oid": 900001, "ocname": "測試恩典教會", "city": "測試市", "town": "甲區", "address": "測試路1號"},
+  "900001": {"oid": 900001, "ocname": "測試恩典教會", "city": "測試市", "town": "甲區", "address": "測試路1號", "tel": "02-0000-0001", "email1": "grace@example.test", "president": "測試牧者", "master_title": "牧師"},
   "900002": {"oid": 900002, "ocname": "測試平安教會", "city": "測試市", "town": "乙區", "address": "測試路2號"},
   "900003": {"oid": 900003, "ocname": "測試新生教會", "city": "測試縣", "town": "丙鄉", "address": "測試路3號"}
  }

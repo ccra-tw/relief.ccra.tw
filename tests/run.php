@@ -501,6 +501,9 @@ ok(count($rS) > 0 && in_array('服務方式', $hS, true) && $rS[0][count($hS) - 
 ok(fmt_value(spec_field(FORM_SPEC, 'employment'), ['sel' => ['無'], 'sub' => ['無' => ['其他']], 'sub_other' => ['無' => '照顧家人']]) === '無（其他、照顧家人）', '就業情況細項與「其他」說明寫進同一格');
 [, $rC] = report_rows($W2, 'church', []);
 ok($rC && !array_filter($rC, fn($r) => $r[4] === '900001'), '教會基本資料也依區域限縮');
+[$nS, $nM] = church_sync();
+[$hC, $rC2] = report_rows($HQW, 'church', ['church' => '恩典']);
+ok($nS > 0 && $rC2 && $rC2[0][9] === '02-0000-0001' && $rC2[0][11] === '測試牧者 牧師', '名錄同步後教會基本資料帶出電話與負責人（' . $nS . ' 間）');
 $nE = (int)$db->query("SELECT count(*) FROM audit_log WHERE action='export' AND target_type='report'")->fetchColumn();
 [$csv] = report_csv($HQW, 'household', []);
 ok(str_starts_with($csv, "\xEF\xBB\xBF") && str_contains($csv, '同住') === false && str_contains($csv, '關係'), '同住家屬表可匯出（需求 0003）');

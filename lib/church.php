@@ -22,8 +22,8 @@ function church_bind(array $u, string $oid, int $areaId): ?string {
     if (!can_use_area($u, $areaId)) return '只能綁定到您所屬區辦底下的區域。';
     $c = dir_get($oid);
     if (!$c) return '名錄查無這個 oid。';
-    $s = rdb()->prepare('INSERT INTO church (oid, name, city, town, address, area_id, bound_by) VALUES (?,?,?,?,?,?,?) ON CONFLICT (oid) DO NOTHING RETURNING oid');
-    $s->execute([$c['oid'], $c['name'], $c['city'], $c['town'], $c['address'], $areaId, $u['id']]);
+    $s = rdb()->prepare('INSERT INTO church (oid, name, city, town, address, tel, email, president, area_id, bound_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (oid) DO NOTHING RETURNING oid');
+    $s->execute([$c['oid'], $c['name'], $c['city'], $c['town'], $c['address'], $c['tel'], $c['email'], $c['president'], $areaId, $u['id']]);
     if (!$s->fetchColumn()) return '這間教會已經綁定過了。';
     audit('create', 'church', $c['oid'], ['area_id' => $areaId, 'name' => $c['name']]);
     return null;
@@ -56,6 +56,19 @@ function church_add_approved(array $u, int $reqId, string $oid): ?string {
 }
 
 // 可以提出急難申請的教會：已綁定且啟用（不在名錄、或名錄還沒核可的，church 表裡根本沒有它）
+// 從名錄更新已綁定教會的名稱、地址、聯絡資料（名錄是主檔）。回傳 [更新筆數, 查無筆數]
+function church_sync(): array {
+    $up = rdb()->prepare('UPDATE church SET name=?, city=?, town=?, address=?, tel=?, email=?, president=?, synced_at=now() WHERE oid=?');
+    $n = $miss = 0;
+    foreach (rdb()->query('SELECT oid FROM church ORDER BY oid')->fetchAll(PDO::FETCH_COLUMN) as $oid) {
+        $c = dir_get((string)$oid);
+        if (!$c) { $miss++; continue; }
+        $up->execute([$c['name'], $c['city'], $c['town'], $c['address'], $c['tel'], $c['email'], $c['president'], $oid]);
+        $n++;
+    }
+    return [$n, $miss];
+}
+
 function church_can_apply(string $oid): bool {
     $s = rdb()->prepare('SELECT 1 FROM church WHERE oid = ? AND active'); $s->execute([$oid]);
     return (bool)$s->fetchColumn();

@@ -119,6 +119,9 @@ function account_request_decide(array $u, int $id, bool $approve, string $reason
     } catch (Throwable $e) { $db->rollBack(); throw $e; }
 }
 
-function notify(string $kind, ?int $toUser, ?string $toEmail, string $subject, string $body): void {
-    rdb()->prepare('INSERT INTO notification (kind, to_user_id, to_email, subject, body) VALUES (?,?,?,?,?)')->execute([$kind, $toUser, $toEmail, $subject, $body]);
+// 先記後寄：只寫進 notification，由寄送端另外寄。$key 有給時同一個 key 只記一筆（回傳 0＝已記過）
+function notify(string $kind, ?int $toUser, ?string $toEmail, string $subject, string $body, ?string $key = null): int {
+    $s = rdb()->prepare('INSERT INTO notification (kind, to_user_id, to_email, subject, body, dedupe_key) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING');
+    $s->execute([$kind, $toUser, $toEmail, $subject, $body, $key]);
+    return $s->rowCount();
 }

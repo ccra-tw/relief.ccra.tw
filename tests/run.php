@@ -434,6 +434,52 @@ ok(receipt_back($W2, $itA, date('Y-m-d')) !== null, '別區不能登記這一期
 ok(receipt_back($WK, $itB, date('Y-m-d')) !== null, '還沒匯款的期數不能登記領據');
 ok(receipt_back($WK, $itA, date('Y-m-d')) === null && !in_array($itA, array_column(receipts_outstanding(), 'id'), true), '區辦登記簽回後不再列為未回');
 
+echo "通知信與提醒（#9）\n";
+$last = fn() => (int)$db->query("SELECT coalesce(max(id),0) FROM notification")->fetchColumn();
+$since = function (int $from, string $kind) use ($db) {
+    $s = $db->prepare("SELECT to_user_id FROM notification WHERE id > ? AND kind = ? ORDER BY to_user_id"); $s->execute([$from, $kind]);
+    return array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
+};
+$sorted = function (array $x) { $x = array_values(array_unique($x)); sort($x); return $x; };
+[$n1] = app_save($CS, $good + ['idno' => fake_id('F23232323'), 'applicant_phone' => '1']);
+$a1 = app_row($n1);
+ok(count(rcpt_pastor($a1)) > 0 && count(rcpt_region($a1)) > 0 && count(rcpt_region_head($a1)) > 0, '測試資料備齊：該教會有牧者、該區有社工與主任');
+$m = $last(); app_submit($CS, $n1);
+ok($since($m, 'review_assigned') === $sorted(rcpt_pastor($a1)), '教會同工送審 → 寄給該教會牧者（3-1-0）');
+$m = $last(); review_act($PA, $n1, 'approve', '牧者');
+ok($since($m, 'review_assigned') === $sorted(rcpt_region($a1)), '牧者通過 → 寄給區辦一社工（3-2-0）');
+$m = $last(); review_act($WK, $n1, 'return', '請補附件', ['5000']);
+ok($since($m, 'review_returned') === [] && count($since($m, 'church_result')) > 0, '區辦一退件 → 只寄教會（3-2-2）');
+app_submit($CS, $n1);
+$m = $last(); review_act($PA, $n1, 'return', '資料再確認');
+ok($since($m, 'review_returned') === $sorted(array_merge(rcpt_region($a1), rcpt_region_head($a1))), '牧者退件 → 區辦一社工與區辦一主任（3-1-2）');
+ok(return_recipients($a1, 'other_region', 'review') === rcpt_region($a1) && return_recipients($a1, 'region', 'cosign') === rcpt_region($a1), '他區退件、區辦一會簽者退件 → 區辦一社工（3-4-2、3-3-2）');
+$m = $last(); approve_all($n1, $CS);
+ok(app_row($n1)['status'] === 'approved' && $since($m, 'review_approved') === $sorted(array_merge(rcpt_region($a1), rcpt_region_head($a1))), '第四關通過 → 區辦一社工與主任＋教會（3-8）');
+$bodies = implode("\n", $db->query("SELECT subject || body FROM notification")->fetchAll(PDO::FETCH_COLUMN));
+ok(!str_contains($bodies, $good['name']) && !preg_match('/[A-Z][12]\d{8}/', $bodies), '所有通知信都不含受助人姓名與身分證字號');
+
+$today = date('Y-m-d'); $d = fn(int $n) => date('Y-m-d', strtotime("$today +$n day"));
+$db->exec("UPDATE installment SET paid_on = '$today'::date - 15, receipt_back_on = NULL WHERE application_id = $pa AND seq = 2");
+$c = run_reminders($d(12));
+ok($c['service'] > 0 && $c['receipt'] > 0, '滿 10 天：服務紀錄與領據各發提醒（' . json_encode($c) . '）');
+ok($c['closure'] > 0, '各期都已匯款且沒送結案報告 → 結案提醒');
+$c2 = run_reminders($d(12));
+ok($c2 === ['service' => 0, 'receipt' => 0, 'closure' => 0], '同一天重跑不會重寄');
+$c3 = run_reminders($d(13));
+ok($c3['service'] === 0 && $c3['closure'] === 0, '隔天（還在同一個 10 天區間）也不重寄');
+$c4 = run_reminders($d(22));
+ok($c4['service'] > 0 && $c4['receipt'] > 0 && $c4['closure'] === 0, '再過 10 天再提醒一次；結案提醒只寄一次');
+ok(count(array_filter(rcpt_church(app_row($pa)), fn($u) => true)) > 0 && !str_contains($bodies, '凍結'), '沒有凍結（服管組 10/15 刪除此規則）');
+
+exec('RELIEF_TEST_DB=1 php ' . escapeshellarg("$ROOT/bin/notify_queue.php") . ' claim 5', $o1, $q1);
+$j1 = json_decode(implode('', $o1), true);
+exec('RELIEF_TEST_DB=1 php ' . escapeshellarg("$ROOT/bin/notify_queue.php") . ' claim 5', $o2, $q2);
+$j2 = json_decode(implode('', $o2), true);
+ok($q1 === 0 && count($j1) === 5 && !array_intersect(array_column($j1, 'id'), array_column($j2, 'id')), '寄送端取件：取過的不會再被取（先記後寄）');
+exec('RELIEF_TEST_DB=1 php ' . escapeshellarg("$ROOT/bin/notify_queue.php") . ' done ' . (int)$j1[0]['id']);
+ok($db->query("SELECT sent_at IS NOT NULL FROM notification WHERE id=" . (int)$j1[0]['id'])->fetchColumn() === true, '寄成功回報後記下 sent_at');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

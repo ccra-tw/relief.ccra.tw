@@ -103,8 +103,10 @@ function batch_paid(array $u, int $bid, string $date): ?string {
             $a = app_row((int)$it['application_id']);
             $label = $a['case_no'] ?: (app_row((int)$a['parent_id'])['case_no'] ?? '');
             notify_church($a, '急難救助金已匯款', "案號 {$label} 第 {$it['seq']} 期已於 {$date} 匯款，領據已開放下載，請於 10 天內簽回。");
-            notify_region_workers($a, '急難救助金已匯款', "案號 {$label} 第 {$it['seq']} 期已於 {$date} 匯款。");
+            notify_users('batch_paid', array_merge(rcpt_region($a), rcpt_region_head($a)), '急難救助金已匯款', "案號 {$label} 第 {$it['seq']} 期已於 {$date} 匯款。");
         }
+        // 服管組社工與主任：整批一封（4-1 批次匯款成功）
+        notify_users('batch_paid', rcpt_hq(), "批次 {$b['year']}-{$b['no']} 匯款成功", "批次 {$b['year']}-{$b['no']} 已於 {$date} 匯款成功，共 " . count(batch_items($bid)) . ' 筆。');
         audit('update', 'batch', $bid, ['status' => 'paid', 'paid_on' => $date]);
         $db->commit();
     } catch (Throwable $e) { $db->rollBack(); throw $e; }

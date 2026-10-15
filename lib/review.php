@@ -157,7 +157,8 @@ function review_act(array $u, int $id, string $action, string $opinion, ?array $
         step($id, $stage, $part, $u['id'], $action, $opinion);
         if ($action === 'return') {
             $db->prepare("UPDATE application SET status='returned', cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$id]);
-            notify_church($a, '急難救助申請被退件', "案號 {$a['case_no']} 被退件，原因：{$opinion}。請修改後再送審。");
+            notify_church($a, '急難救助申請被退件', '案號 ' . case_label($a) . " 被退件，原因：{$opinion}。請修改後再送審。");
+            notify_users('review_returned', return_recipients($a, $stage, $part), '您經手的案件被退件', '案號 ' . case_label($a) . '（' . STATUS_NAMES[$a['status']] . "）被退件，原因：{$opinion}。已退回教會修改。");
         } elseif ($action === 'reject') {
             $db->prepare("UPDATE application SET status='rejected', cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$id]);
             notify_church($a, '急難救助申請未通過', "案號 {$a['case_no']} 審核未通過。");
@@ -179,7 +180,8 @@ function advance(array $a): void {
     if ($next === 'approved') {
         // 開案日＝原案通過日；異動通過不改開案日（12 個月區間從原案算）
         $db->prepare("UPDATE application SET status='approved', opened_at=CASE WHEN kind = 'new' THEN current_date ELSE opened_at END, cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$a['id']]);
-        notify_church($a, '急難救助申請通過', "案號 {$a['case_no']} 審核通過，後續撥款進度會再通知。");
+        notify_church($a, '急難救助申請通過', '案號 ' . case_label($a) . ' 審核通過，後續撥款進度會再通知。');
+        notify_users('review_approved', array_merge(rcpt_region($a), rcpt_region_head($a)), '案件審核通過', '案號 ' . case_label($a) . ' 已通過第四關審核。');
         return;
     }
     if (in_array($next, ['other_review', 'hq_review'], true) && assign($a, STAGES[$next]) === null)
@@ -190,10 +192,16 @@ function advance(array $a): void {
 
 function notify_stage(int $id, string $status): void {
     $a = app_row($id);
-    if (in_array($status, ['other_review', 'hq_review'], true)) {
-        $s = rdb()->prepare('SELECT user_id FROM assignment WHERE application_id = ? AND stage = ?'); $s->execute([$id, STAGES[$status]]);
-        if ($uid = $s->fetchColumn()) notify('review_assigned', (int)$uid, null, '有一案派給您審核', "案號 {$a['case_no']} 已派給您（" . STATUS_NAMES[$status] . '）。');
-    }
+    $what = $a['kind'] === 'change' ? '異動申請' : '申請';
+    $label = case_label($a);
+    // 進入哪一關就寄給那一關的審核者（服管組通知 Email 內容 3-1-0、3-2-0、3-4-0、3-6-0；異動 5-x-0 同）
+    $to = match ($status) {
+        'pastor_review' => rcpt_pastor($a),
+        'region_review' => rcpt_region($a),
+        'other_review', 'hq_review' => rcpt_assigned($a, STAGES[$status]),
+        default => [],
+    };
+    notify_users('review_assigned', $to, "有一案{$what}等您審核", "案號 {$label} 的{$what}目前在「" . STATUS_NAMES[$status] . '」，請登入審核。');
 }
 
 function notify_church(array $a, string $subject, string $body): void {

@@ -115,6 +115,5 @@ function closure_review(array $u, int $closureId, string $action, string $opinio
 }
 
 function notify_region_workers(array $a, string $subject, string $body): void {
-    $s = rdb()->prepare("SELECT id FROM app_user WHERE active AND role = 'region_worker' AND region_id = ?"); $s->execute([$a['region_id']]);
-    foreach ($s->fetchAll(PDO::FETCH_COLUMN) as $uid) notify('closure_review', (int)$uid, null, $subject, $body);
+    notify_users('closure_review', rcpt_region($a), $subject, $body);
 }

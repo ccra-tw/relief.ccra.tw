@@ -29,7 +29,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $s->execute([$rid, $code, $name]);
         $id = $s->fetchColumn();
         if ($id) { audit('create', 'area', $id, ['region_id' => $rid, 'code' => $code, 'name' => $name]); $msg = "已新增區域 $code"; }
-        else $msg = "這個區辦已有區域碼 $code。";
+        else $msg = "這個區辦已有區域碼 {$code}。";
     } elseif ($a === 'area_edit') {
         $id = (int)$_POST['id'];
         $db->prepare('UPDATE area SET code=?, name=?, active=? WHERE id=?')->execute([$code, $name, $active ? 't' : 'f', $id]);

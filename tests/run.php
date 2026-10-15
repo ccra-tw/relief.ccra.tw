@@ -3,6 +3,9 @@
 // 用法（主機上，要讀得到 db.ini 的身分）：php tests/run.php
 putenv('RELIEF_TEST_DB=1');
 putenv('RELIEF_TEST_DIR=' . __DIR__ . '/fixtures/directory.json');   // 名錄 API 一律用假資料
+putenv('RELIEF_TEST_SECRET=1');                                       // 個資加密用測試金鑰
+$UP = sys_get_temp_dir() . '/relief-test-uploads-' . getmypid();
+putenv("RELIEF_UPLOAD_DIR=$UP");
 require __DIR__ . '/../lib/boot.php';
 $ROOT = realpath(__DIR__ . '/..');
 $fail = 0;
@@ -146,10 +149,93 @@ ok(!str_contains($notes[0]['body'] . $notes[1]['body'], $pw0), '初始密碼不�
 [$w] = scope_sql($gu, 'region_id', 'church_oid');
 ok($w === 'church_oid = ?', '教會帳號的可見範圍限縮到自己教會');
 
+echo "申請表欄位驗證（#5）\n";
+// 依檢查碼產生虛構但格式正確的身分證號
+function fake_id(string $head): string {
+    $map = 'ABCDEFGHJKLMNPQRSTUVXYWZIO';
+    for ($d = 0; $d <= 9; $d++) { $s = $head . $d; if (idno_valid($s)) return $s; }
+    throw new Exception('no check digit');
+}
+$ID1 = fake_id('F12345678'); $ID2 = fake_id('F22233344'); $IDR = fake_id('A80000001');
+ok(idno_valid($ID1) && idno_valid($IDR) && !idno_valid('F123456789' === $ID1 ? 'F123456788' : 'F123456789'), '身分證與新式居留證檢查碼驗證');
+$good = ['category' => '一般急難', 'name' => '測試個案甲', 'nationality' => '中華民國', 'gender' => '女', 'birthday' => '1980-01-01', 'mobile' => '0900 000 000',
+    'marital' => '已婚', 'address' => '測試市測試路1號', 'housing' => '租屋', 'source' => '教會發掘', 'religion' => '基督教', 'religion__5' => '本會會友',
+    'support' => '否', 'debt' => ['銀行債'], 'debt__2' => ['30,000', '', '', ''], 'employment' => '全職', 'subsidy' => ['無'], 'emergency' => ['意外'],
+    'before' => '測試原本情況', 'event' => '測試急難事件', 'plan' => '測試未來計畫', 'income_before' => ['20000', '0'], 'income_now' => ['0', '0'],
+    'spend_before' => array_fill(0, 10, '0'), 'spend_after' => array_fill(0, 10, '0'), 'church_service' => ['禱告扶持'], 'usage' => ['基本生活費'], 'amount_requested' => '12,000'];
+[$d, $e] = form_validate($good);
+ok($e === [] && $d['amount_requested'] === 12000 && $d['debt']['sub']['銀行債']['卡債'] === 30000 && $d['mobile'] === '0900000000', '完整填寫通過；金額去逗號、電話去空白、銀行債次選項金額');
+[$d, $e] = form_validate(['name' => ''] + $good);
+ok(isset($e['name']), '必填欄位空白會被擋');
+[$d, $e] = form_validate(['housing' => '其他'] + $good);
+ok(isset($e['housing_other']), '選「其他」沒填說明會被擋');
+[$d, $e] = form_validate(['housing' => '其他', 'housing_other' => '借住親友家'] + $good);
+ok(!isset($e['housing_other']) && $d['housing']['other'] === '借住親友家', '選「其他」有填說明就通過');
+[$d, $e] = form_validate(['religion' => '基督教', 'religion__5' => ''] + $good);
+ok(isset($e['religion__5']), '基督教沒選本會／他會會被擋（次選項必填）');
+[$d, $e] = form_validate(['debt' => ['無', '銀行債']] + $good);
+ok(isset($e['debt']), '債務選「無」又選別項會被擋');
+[$d, $e] = form_validate(['housing' => '城堡'] + $good);
+ok(isset($e['housing']), '不在選項裡的值會被丟掉並視為未選');
+[$d, $e] = form_validate(['amount_requested' => '一萬'] + $good);
+ok(isset($e['amount_requested']), '金額只能填數字');
+ok(norm_account(' 0123 4567 89 ') === '0123456789' && norm_account('123-456') === null, '帳戶欄位自動去空白、只允許數字（需求 0004）');
+
+echo "建立申請與個資保護（#5）\n";
+$ins->execute([null, 'grace-staff', password_hash('x', PASSWORD_DEFAULT), '測試教會同工二', 'church_staff', null]);
+$db->exec("UPDATE app_user SET church_oid='900001' WHERE username IN ('grace-staff')");
+$CS = load_user('username', 'grace-staff');
+[$aid, $e] = app_save($CS, $good + ['idno' => $ID1, 'applicant_phone' => '02-0000000',
+    'household' => [['name' => '測試家屬一', 'idno' => $ID2, 'relation' => '子'], ['name' => '', 'idno' => '']]]);
+ok($aid && $e === [], '教會同工建立申請（空白家屬列略過）');
+$raw = json_encode($db->query("SELECT * FROM person")->fetchAll()) . json_encode($db->query("SELECT * FROM application")->fetchAll());
+ok(!str_contains($raw, $ID1) && !str_contains($raw, $ID2), '資料庫裡找不到個案與家屬身分證號明文');
+$hhRow = json_decode($db->query("SELECT household FROM application WHERE id=$aid")->fetchColumn(), true);
+ok(count($hhRow) === 1 && pii_decrypt($hhRow[0]['idno_enc']) === $ID2, '家屬身分證號是密文、可用金鑰解回');
+[$x, $e] = app_save($CS, $good + ['idno' => 'A123456780', 'applicant_phone' => '1']);
+ok(isset($e['idno']), '檢查碼錯的身分證號擋下');
+$WK = load_user('email', 'worker@example.test');   // 區辦社工（區辦 1，與 900001 同區）
+ok(!array_key_exists('status', app_load($CS, $aid)) && array_key_exists('status', app_load($WK, $aid)), '教會端看不到審核狀態，區辦看得到（需求 0002）');
+$CSa = app_load($CS, $aid);
+ok(app_idno_display($CS, $CSa, true) === pii_mask($ID1[0], substr($ID1, -4)), '教會端即使要求也只看到遮罩號碼');
+$nView = (int)$db->query("SELECT count(*) FROM audit_log WHERE action='view' AND target_type='idno'")->fetchColumn();
+ok(app_idno_display($WK, app_load($WK, $aid), true) === $ID1 && (int)$db->query("SELECT count(*) FROM audit_log WHERE action='view' AND target_type='idno'")->fetchColumn() === $nView + 1, '區辦社工可看完整號碼，且留一筆稽核');
+$ins->execute(['worker2@example.test', null, null, '測試南區社工', 'region_worker', 2]);
+$W2 = load_user('email', 'worker2@example.test');
+ok(app_load($W2, $aid) === null, '別區社工看不到這份申請');
+$db->prepare("INSERT INTO assignment (application_id, stage, user_id) VALUES (?, 'other_region', ?)")->execute([$aid, $W2['id']]);
+ok(app_load($W2, $aid) !== null, '被派案的他區社工看得到');
+
+echo "分流（#5）\n";
+ok(intake_route($ID2)['route'] === 'new', '沒有開案紀錄的人走新申請');
+$db->exec("UPDATE application SET case_no='T1-A-2026-001', opened_at=current_date - 30 WHERE id=$aid");
+$r = intake_route($ID1);
+ok($r['route'] === 'change' && $r['case_no'] === 'T1-A-2026-001', '開案未滿一年 → 走異動');
+[$x, $e] = app_save($CS, $good + ['idno' => $ID1, 'applicant_phone' => '1']);
+ok(isset($e['idno']) && str_contains($e['idno'], '異動'), '這種情況下新申請會被擋並提示走異動');
+$db->exec("UPDATE application SET opened_at=current_date - 400 WHERE id=$aid");
+ok(intake_route($ID1)['route'] === 'new', '開案超過一年 → 可以新申請');
+
+echo "附件（#5）\n";
+$tmpPng = tempnam(sys_get_temp_dir(), 'rt'); file_put_contents($tmpPng, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));
+ok(attach_add($CS, $aid, 'proof', $tmpPng, '證明.png') === null, 'PNG 上傳成功');
+$st = $db->query("SELECT stored_name, sha256 FROM attachment ORDER BY id DESC LIMIT 1")->fetch();
+ok(is_file("$UP/{$st['stored_name']}") && hash_file('sha256', "$UP/{$st['stored_name']}") === $st['sha256'], '檔案存在主機目錄，資料庫只有中繼資料與雜湊');
+$tmpExe = tempnam(sys_get_temp_dir(), 'rt'); file_put_contents($tmpExe, "MZ\x90\x00 fake exe");
+ok(str_contains((string)attach_add($CS, $aid, 'proof', $tmpExe, '偽裝.pdf'), '只接受'), '副檔名改成 .pdf 的執行檔照樣擋下（以內容判斷）');
+$tmpBig = tempnam(sys_get_temp_dir(), 'rt'); $fh = fopen($tmpBig, 'w'); fwrite($fh, "%PDF-1.4\n"); fseek($fh, ATTACH_MAX + 10); fwrite($fh, 'x'); fclose($fh);
+ok(str_contains((string)attach_add($CS, $aid, 'proof', $tmpBig, 'big.pdf'), '10MB'), '超過 10MB 擋下');
+ok(attach_add($W2, $aid, 'bogus', $tmpPng, 'x.png') !== null, '附件類別不在清單內擋下');
+foreach ([$tmpPng, $tmpExe, $tmpBig] as $t) @unlink($t);
+array_map('unlink', glob("$UP/*") ?: []); @rmdir($UP);
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');
 ok(trim((string)$leak) === '', 'lib／public／sql 裡沒有密碼字串或 IP 位址');
+// "$變數：" 這種寫法 PHP 會把全形字元當成變數名稱的一部分（2026-10-15 踩到），一律要寫成 {$變數}
+$interp = shell_exec('grep -rnP ' . escapeshellarg('\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]') . ' --include=*.php ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . " | grep -vP '\\{\\\$[A-Za-z_][^}]*\\}'");
+ok(trim((string)$interp) === '', '字串裡的變數後面緊接中文時都有用 {} 包起來');
 
 echo $fail ? "\n❌ $fail 項失敗\n" : "\n全部通過\n";
 exit($fail ? 1 : 0);

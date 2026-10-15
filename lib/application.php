@@ -122,6 +122,7 @@ function app_idno_display(array $u, array $a, bool $full = false): string {
 function attach_add(array $u, int $appId, string $kind, string $tmp, string $origName): ?string {
     $a = app_load($u, $appId);
     if (!$a) return '找不到這份申請。';
+    if (!empty($a['closed_at'])) return '已結案，不能再上傳附件。';
     if (!isset(ATTACH_KINDS[$kind])) return '附件類別不正確。';
     if (!is_file($tmp)) return '沒有收到檔案。';
     $size = filesize($tmp);

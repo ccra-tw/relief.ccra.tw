@@ -71,22 +71,27 @@ const ATTACH_MIME = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/p
                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx'];
 const ATTACH_MAX = 10 * 1024 * 1024;
 
-function form_fields(): array {
+function form_fields(array $spec = FORM_SPEC): array {
     $out = [];
-    foreach (FORM_SPEC as [, $fields]) foreach ($fields as $f) $out[$f['key']] = $f;
+    foreach ($spec as [, $fields]) foreach ($fields as $f) $out[$f['key']] = $f;
     return $out;
 }
 
 // 驗證並正規化表單輸入。回傳 [資料, 錯誤陣列]
-function form_validate(array $in): array {
+function form_validate(array $in, array $spec = FORM_SPEC): array {
     $data = []; $err = [];
-    foreach (form_fields() as $k => $f) {
+    foreach (form_fields($spec) as $k => $f) {
         $v = $in[$k] ?? null;
         switch ($f['type']) {
             case 'text': case 'textarea': case 'tel':
                 $v = trim((string)$v);
                 if ($f['type'] === 'tel') $v = preg_replace('/\s+/', '', $v);
                 if ($f['req'] && $v === '') $err[$k] = "{$f['label']}必填";
+                $data[$k] = $v; break;
+            case 'datetime':
+                $v = trim((string)$v);
+                if ($v !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $v)) $err[$k] = "{$f['label']}格式不正確";
+                elseif ($f['req'] && $v === '') $err[$k] = "{$f['label']}必填";
                 $data[$k] = $v; break;
             case 'date':
                 $v = trim((string)$v);

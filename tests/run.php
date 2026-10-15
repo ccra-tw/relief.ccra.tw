@@ -309,6 +309,76 @@ ok(isset(app_update(load_user('email', 'hq@example.test'), $app, $good)['_']), '
 $actSrc = file_get_contents("$ROOT/public/review/act.php");
 ok(str_contains($actSrc, '>完成審核<') && !str_contains($actSrc, '核准'), '審核按鈕文字是「完成審核」，不用「核准」（需求 0004）');
 
+// 把一案從送審一路審到通過（測試用）
+function approve_all(int $id, array $by): void {
+    global $PA, $WK, $HEAD, $db;
+    app_submit($by, $id);
+    if (app_row($id)['status'] === 'pastor_review') review_act($PA, $id, 'approve', '牧者');
+    review_act($WK, $id, 'approve', '區辦', ['5000']);
+    review_act($HEAD, $id, 'approve', '會簽');
+    foreach (['other_review' => 'other_region', 'hq_review' => 'hq'] as $st => $stage) {
+        $uid = (int)$db->query("SELECT user_id FROM assignment WHERE application_id=$id AND stage='$stage'")->fetchColumn();
+        review_act(load_user('id', (string)$uid), $id, 'approve', $stage);
+    }
+}
+$chg = ['category' => '一般急難', 'change_items' => ['金額'], 'change_reason' => '案家仍需要金援', 'change_desc' => '測試：第一期已核發，仍需支援', 'amount_requested' => '8000'];
+
+echo "異動申請（#7）\n";
+$p0 = app_row($app);
+[$c1, $e] = change_create($CS, $app, $chg);
+ok($c1 && !$e && app_row($c1)['kind'] === 'change' && (int)app_row($c1)['parent_id'] === $app, '已通過的原案可建立異動申請');
+[$x, $e] = change_create($CS, $app, $chg);
+ok(isset($e['_']) && str_contains($e['_'], '重疊'), '前一筆異動還在處理中，不能重疊申請');
+ok(app_submit($CS, $c1) === null && app_row($c1)['case_no'] === null && app_row($c1)['status'] === 'pastor_review', '異動送審走同一套審核引擎，不另編案號');
+$C1 = app_row($c1);
+ok(edit_level($CS, $C1) === null && edit_level($PA, $C1) === 'all', '「教會牧者異動審核中」教會同工不能改、牧者可改（審核修改表）');
+approve_all($c1, $CS);
+ok(app_row($c1)['status'] === 'approved' && app_row($c1)['opened_at'] === null && app_row($app)['opened_at'] === $p0['opened_at'], '異動通過；原案開案日不變，異動不另算開案');
+ok(app_row($app)['status'] === 'approved', '原案狀態不受異動影響（狀態不混淆）');
+[$x, $e] = change_create($CS, $app, $chg);
+ok(isset($e['_']) && str_contains($e['_'], '最多申請 2 次'), '12 個月內原案＋1 次異動後，不能再異動');
+$db->exec("UPDATE application SET opened_at = current_date - interval '13 months' WHERE id=$app");
+[$x, $e] = change_create($CS, $app, $chg);
+ok(isset($e['_']) && str_contains($e['_'], '超過開案後 12 個月'), '超過開案月份起算 12 個月的區間，不能異動');
+$db->exec("UPDATE application SET opened_at = '{$p0['opened_at']}' WHERE id=$app");
+[$w0, $w1] = change_window(['opened_at' => '2026-09-12']);
+ok($w0 === '2026-09-01' && $w1 === '2027-08-31', '區間計算與服管組範例一致（9/12 開案 → 到 2027/8/31）');
+
+echo "服務紀錄（#7）\n";
+$svc = ['volunteers' => '2', 'mode' => '家訪', 'served_at' => date('Y-m-d') . 'T10:30', 'issues' => ['債務'], 'content' => ['禱告扶持'],
+        'imp_emergency' => '稍有改善', 'imp_resource' => '尚未連結其他資源', 'imp_mood' => '維持原狀', 'faith' => '是', 'faith__0' => '一週1-2次'];
+ok(service_add($CS, $app, $svc) === [], '教會新增服務紀錄');
+ok(isset(service_add($CS, $app, ['faith' => '是'] + array_diff_key($svc, ['faith__0' => 1]))['faith__0']), '信仰狀況選「是」沒選細項會被擋');
+ok(isset(service_add($WK, $app, $svc)['_']), '服務紀錄由教會填，區辦不能代填');
+$db->exec("UPDATE service_record SET served_at = now() - interval '12 days' WHERE application_id=$app");
+$db->exec("UPDATE application SET opened_at = current_date - 20 WHERE id=$app");
+ok(service_days_since(app_row($app)) === 12, '距上次服務紀錄 12 天（≥10 天要提醒）');
+$db->exec("UPDATE application SET opened_at = '{$p0['opened_at']}' WHERE id=$app");
+
+echo "結案（#7）\n";
+$cls = ['close_type' => '正常結案'] + $svc + ['followup' => '是', 'followup__0' => '開始進入教會牧養'];
+ok(isset(closure_submit($CS, $app, ['close_type' => '正常結案'] + $svc)['followup']), '結案問卷（後續服務）必填');
+ok(closure_submit($CS, $app, $cls) === [], '正常結案送出');
+$A = app_row($app);
+ok($A['status'] === 'closed' && $A['closed_at'] === date('Y-m-d'), '正常結案不需審核，結案日＝送出日');
+ok(edit_level($ADM, $A) === null && edit_level($CS, $A) === null, '結案後唯讀，管理者也不能改');
+ok(isset(service_add($CS, $app, $svc)['_']) && isset(change_create($CS, $app, $chg)[1]['_']), '結案後不能再加服務紀錄或異動');
+ok(attach_add($CS, $app, 'proof', __FILE__, 'x.txt') !== null, '結案後不能再上傳附件');
+
+$ID5 = fake_id('F19191919');
+[$app5] = app_save($CS, $good + ['idno' => $ID5, 'applicant_phone' => '02-5']);
+approve_all($app5, $CS);
+ok(app_row($app5)['status'] === 'approved', '再建一案並審核通過（給提早結案用）');
+ok(closure_submit($CS, $app5, ['close_type' => '案主死亡，提早結案'] + $cls) === [], '提早結案（2-3 選項）送出');
+ok(app_row($app5)['status'] === 'approved' && (int)$db->query("SELECT count(*) FROM closure WHERE application_id=$app5 AND status='pending_review'")->fetchColumn() === 1, '要等區辦審核，個案還沒結');
+ok(isset(closure_submit($CS, $app5, $cls)['_']), '已有一份待審，不能再送');
+$cid = (int)$db->query("SELECT id FROM closure WHERE application_id=$app5")->fetchColumn();
+$db->exec("UPDATE closure SET submitted_at = now() - interval '3 days' WHERE id=$cid");
+ok(str_contains((string)closure_review($W2, $cid, 'approve', '好'), '區辦社工審核'), '別區社工不能審');
+ok(closure_review($WK, $cid, 'approve', '') !== null, '審核意見必填');
+ok(closure_review($WK, $cid, 'approve', '同意結案') === null, '本區社工審核通過');
+ok(app_row($app5)['status'] === 'closed' && app_row($app5)['closed_at'] === date('Y-m-d', strtotime('-3 days')), '結案日＝教會送出結案報告那天（不是審核那天）');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

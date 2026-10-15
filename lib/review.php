@@ -7,7 +7,7 @@
 const STAGES = ['pastor_review' => 'pastor', 'region_review' => 'region', 'other_review' => 'other_region', 'hq_review' => 'hq'];
 const STATUS_NAMES = [
     'draft' => '教會同工尚未送審', 'pastor_review' => '教會牧者審核中', 'region_review' => '區辦社工審核中', 'other_review' => '他區社工審核中',
-    'hq_review' => '服管組審核中', 'approved' => '申請通過', 'returned' => '退件（教會修改中）', 'rejected' => '不通過',
+    'hq_review' => '服管組審核中', 'approved' => '申請通過', 'returned' => '退件（教會修改中）', 'rejected' => '不通過', 'closed' => '已結案',
 ];
 
 // 審核修改表（服管組）：狀態 × 角色 → all（全部欄位＋上傳）／basic（姓名、電話、手機、地址＋上傳）／不能改
@@ -31,7 +31,10 @@ function app_row(int $id): ?array {
 
 // 這位使用者對這一案目前能改到什麼程度：'all'／'basic'／null
 function edit_level(array $u, array $a): ?string {
+    if ($a['status'] === 'closed' || !empty($a['closed_at'])) return null;   // 結案後唯讀，管理者也不例外（#7）
     if ($u['role'] === 'admin') return 'all';                     // 最高權限：任何狀態都可改
+    // 異動申請在「教會牧者異動審核中」時，教會同工那格是空白（審核修改表）
+    if (($a['kind'] ?? 'new') === 'change' && $a['status'] === 'pastor_review' && $u['role'] === 'church_staff') return null;
     $m = EDIT_MATRIX[$a['status']] ?? [];
     $r = $u['role'];
     if ($r === 'region_worker') {
@@ -67,7 +70,8 @@ function app_submit(array $u, int $id): ?string {
     if (!in_array($a['status'], ['draft', 'returned'], true)) return '這份申請已在審核中。';
     $db = rdb(); $db->beginTransaction();
     try {
-        $caseNo = $a['case_no'] ?: next_case_no($a);              // 送審即編案號；退件再送沿用
+        // 送審即編案號；退件再送沿用。異動申請不另編號，沿用原案（畫面顯示原案案號）
+        $caseNo = $a['kind'] === 'change' ? null : ($a['case_no'] ?: next_case_no($a));
         $to = $u['role'] === 'church_pastor' ? 'region_review' : 'pastor_review';
         $db->prepare('UPDATE application SET status=?, case_no=?, submitted_at=COALESCE(submitted_at, now()), cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?')
            ->execute([$to, $caseNo, $id]);
@@ -173,7 +177,8 @@ function advance(array $a): void {
     $next = ['pastor_review' => 'region_review', 'region_review' => 'other_review', 'other_review' => 'hq_review', 'hq_review' => 'approved'][$a['status']];
     $db = rdb();
     if ($next === 'approved') {
-        $db->prepare("UPDATE application SET status='approved', opened_at=current_date, cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$a['id']]);
+        // 開案日＝原案通過日；異動通過不改開案日（12 個月區間從原案算）
+        $db->prepare("UPDATE application SET status='approved', opened_at=CASE WHEN kind = 'new' THEN current_date ELSE opened_at END, cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$a['id']]);
         notify_church($a, '急難救助申請通過', "案號 {$a['case_no']} 審核通過，後續撥款進度會再通知。");
         return;
     }

@@ -21,6 +21,13 @@ page_head('審核', $u);
 echo '<h1>審核：' . h($a['case_no']) . ' ' . h($a['name']) . '</h1>';
 echo '<p>' . h(STATUS_NAMES[$a['status']]) . ($part === 'cosign' ? '（您是會簽者）' : '') . '・教會申請金額 ' . number_format((int)$a['amount_requested']) . ' 元・<a href="/cases/view.php?id=' . $id . '" target=_blank>看完整申請內容</a></p>';
 if ($msg) echo '<p class=err>' . h($msg) . '</p>';
+if ($a['kind'] === 'change' && ($p = app_row((int)$a['parent_id']))) {
+    // 異動審核：畫面下方顯示原始申請內容（需求 0003）
+    $cd = json_decode($a['data'], true);
+    echo '<div class=card style=max-width:none><b>異動申請</b>（原案 ' . h($p['case_no']) . '，開案 ' . h($p['opened_at']) . '）<br>異動項目：' . h(implode('、', $cd['change_items']['sel'] ?? []))
+       . '<br>異動原因：' . h(implode('、', $cd['change_reason']['sel'] ?? [])) . h(isset($cd['change_reason']['other']) ? '（' . $cd['change_reason']['other'] . '）' : '')
+       . '<br>描述：' . nl2br(h($cd['change_desc'] ?? '')) . '<br><a href="/cases/view.php?id=' . (int)$p['id'] . '" target=_blank>原始申請內容</a></div>';
+}
 echo '<h2>審核紀錄</h2><table><tr><th>時間</th><th>關卡</th><th>誰</th><th>動作</th><th>意見</th></tr>';
 $an = ['submit' => '送審', 'approve' => '完成審核', 'return' => '退件', 'reject' => '不通過'];
 foreach ($steps as $s) echo '<tr><td>' . h(date('m-d H:i', strtotime($s['at']))) . '</td><td>' . h($s['stage'] . ($s['part'] === 'cosign' ? '（會簽）' : '')) . '</td><td>' . h($s['display_name']) . '</td><td>' . h($an[$s['action']]) . '</td><td>' . h($s['opinion']) . '</td></tr>';

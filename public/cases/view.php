@@ -43,6 +43,8 @@ $at->execute([$a['id']]);
 foreach ($at as $f) echo '<li>' . h(ATTACH_KINDS[$f['kind']]) . '：<a href="/cases/file.php?id=' . (int)$f['id'] . '">' . h($f['orig_name']) . '</a>（' . round($f['size'] / 1024) . ' KB）</li>';
 echo '</ul>';
 $raw = app_row((int)$a['id']);
+if ($raw['kind'] === 'new' && in_array($raw['status'], ['approved', 'closed'], true)) echo '<p><a class=btn href="/cases/followup.php?id=' . (int)$a['id'] . '">服務紀錄、異動與結案</a></p>';
+if ($raw['kind'] === 'change') echo '<p class=note>這是異動申請，原案：<a href="/cases/view.php?id=' . (int)$raw['parent_id'] . '">開啟原案</a></p>';
 if (in_array($u['role'], APPLY_ROLES, true) && in_array($raw['status'], ['draft', 'returned'], true)) {
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['act'] ?? '') === 'submit') {
         csrf_check();

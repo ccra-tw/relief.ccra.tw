@@ -8,8 +8,9 @@ function fr_field(array $f, $v, array $err): string {
     $h = '<div class="field" id="f-' . h($k) . '"><div class="lbl">' . h($f['label']) . $req . '</div>';
     if (!empty($f['hint'])) $h .= '<div class="note">' . h($f['hint']) . '</div>';
     switch ($f['type']) {
-        case 'text': case 'tel': case 'date':
-            $h .= '<input name="' . h($k) . '" type="' . ($f['type'] === 'tel' ? 'tel' : $f['type']) . '" value="' . h($v) . '">'; break;
+        case 'text': case 'tel': case 'date': case 'datetime':
+            $t = ['datetime' => 'datetime-local'][$f['type']] ?? $f['type'];
+            $h .= '<input name="' . h($k) . '" type="' . $t . '" value="' . h($v) . '">'; break;
         case 'textarea': $h .= '<textarea name="' . h($k) . '" rows=4>' . h($v) . '</textarea>'; break;
         case 'money': $h .= '<input name="' . h($k) . '" inputmode=numeric value="' . h($v) . '">'; break;
         case 'check': $h .= '<label class=inline><input type=checkbox name="' . h($k) . '" value=1' . ($v ? ' checked' : '') . '> 是</label>'; break;
@@ -43,9 +44,9 @@ function fr_field(array $f, $v, array $err): string {
     return $h . '</div>';
 }
 
-function fr_form(array $data, array $err): string {
+function fr_form(array $data, array $err, array $spec = FORM_SPEC): string {
     $h = '';
-    foreach (FORM_SPEC as [$title, $fields]) {
+    foreach ($spec as [$title, $fields]) {
         $h .= '<fieldset><legend>' . h($title) . '</legend>';
         foreach ($fields as $f) $h .= fr_field($f, $data[$f['key']] ?? null, $err);
         $h .= '</fieldset>';

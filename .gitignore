@@ -1,5 +1,8 @@
 /config.local.php
 *.ini
 .env
+*.env
 /uploads/
 /storage/
+/vendor/
+.DS_Store

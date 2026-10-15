@@ -64,6 +64,51 @@ ok((int)$db->query("SELECT count(*) FROM audit_log WHERE action='deny'")->fetchC
 ok(str_contains($o, 'ADMIN-OK'), '管理者進得去');
 unlink("$ROOT/public/_t_admin.php");
 
+echo "區域主檔（#3）\n";
+$n0 = (int)$db->query("SELECT count(*) FROM audit_log WHERE action='create' AND target_type='region'")->fetchColumn();
+[$c, $o] = page('admin/regions.php', 'admin@example.test', ['act' => 'region_add', 'code' => 't3', 'name' => '測試東區']);
+ok(str_contains($o, '已新增區辦 T3') && (int)$db->query("SELECT count(*) FROM region WHERE code='T3'")->fetchColumn() === 1, '管理者新增區辦（代碼自動轉大寫）');
+ok((int)$db->query("SELECT count(*) FROM audit_log WHERE action='create' AND target_type='region'")->fetchColumn() === $n0 + 1, '新增區辦寫 audit_log');
+[$c, $o] = page('admin/regions.php', 'admin@example.test', ['act' => 'region_add', 'code' => 'T3', 'name' => '重複']);
+ok(str_contains($o, '已存在'), '區辦碼重複會被擋');
+[$c, $o] = page('admin/regions.php', 'admin@example.test', ['act' => 'area_add', 'region_id' => '1', 'code' => 'A', 'name' => '測試甲區']);
+page('admin/regions.php', 'admin@example.test', ['act' => 'area_add', 'region_id' => '2', 'code' => 'B', 'name' => '測試乙區']);
+ok((int)$db->query("SELECT count(*) FROM area")->fetchColumn() === 2, '兩個區辦各新增一個區域');
+[$c, $o] = page('admin/regions.php', 'church-demo', ['act' => 'region_add', 'code' => 'X9', 'name' => '不該成功']);
+ok((int)$db->query("SELECT count(*) FROM region WHERE code='X9'")->fetchColumn() === 0, '非管理者送表單也改不了主檔');
+
+echo "資料範圍在查詢層（#3）\n";
+$ins->execute(['assist@example.test', null, null, '測試社工助理', 'assistant', 1]);
+$ins->execute(['assist2@example.test', null, null, '未設區辦的助理', 'assistant', null]);
+$ins->execute(['hq@example.test', null, null, '測試服管組社工', 'hq_worker', null]);
+$areasFor = function (string $who) use ($db) {
+    $uu = load_user('email', $who);
+    [$w, $p] = scope_sql($uu, 'region_id');
+    $s = $db->prepare("SELECT code FROM area WHERE $w ORDER BY code"); $s->execute($p);
+    return $s->fetchAll(PDO::FETCH_COLUMN);
+};
+ok($areasFor('assist@example.test') === ['A'], '社工助理只查得到自己區辦的資料');
+ok($areasFor('assist2@example.test') === [], '沒設區辦的助理一筆都查不到（不會退回全部）');
+ok($areasFor('hq@example.test') === ['A', 'B'], '服管組查得到全部');
+[$w] = scope_sql(load_user('username', 'church-demo'), 'region_id', 'church_oid');
+ok($w === 'FALSE', '沒綁教會的教會帳號一筆都看不到');
+
+echo "會簽設定（#3）\n";
+$hqHead = $ins->execute(['head@example.test', null, null, '測試服管組主任', 'hq_head', null]);
+$headId = (int)$db->query("SELECT id FROM app_user WHERE email='head@example.test'")->fetchColumn();
+$wId = (int)$db->query("SELECT id FROM app_user WHERE email='worker@example.test'")->fetchColumn();
+$asId = (int)$db->query("SELECT id FROM app_user WHERE email='assist@example.test'")->fetchColumn();
+$base = ['act' => 'edit', 'id' => (string)$wId, 'display_name' => '測試區辦社工', 'role' => 'region_worker', 'region_id' => '1', 'active' => '1'];
+[$c, $o] = page('admin/users.php', 'admin@example.test', $base + ['needs_cosign' => '1']);
+ok(str_contains($o, '就要指定會簽者'), '勾須會簽卻沒指定會簽者會被擋');
+[$c, $o] = page('admin/users.php', 'admin@example.test', $base + ['needs_cosign' => '1', 'cosigner_id' => (string)$asId]);
+ok(str_contains($o, '會簽者只能是'), '社工助理不能當會簽者');
+[$c, $o] = page('admin/users.php', 'admin@example.test', $base + ['needs_cosign' => '1', 'cosigner_id' => (string)$headId]);
+$row = $db->query("SELECT needs_cosign, cosigner_id FROM app_user WHERE id=$wId")->fetch();
+ok($row['needs_cosign'] === true && (int)$row['cosigner_id'] === $headId, '指定服管組主任為固定會簽者成功');
+[$c, $o] = page('admin/users.php', 'admin@example.test', ['act' => 'add', 'display_name' => '測試新教會', 'username' => 'church-new', 'role' => 'church_staff']);
+ok(preg_match('/初始密碼（只顯示這一次）：(\S{12})/u', $o, $mm) === 1 && password_login('church-new', $mm[1]) === null, '新增教會帳號產生 12 碼初始密碼，且能用它登入');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

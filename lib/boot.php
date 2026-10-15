@@ -12,6 +12,7 @@ require_once __DIR__ . '/review.php';
 require_once __DIR__ . '/followup.php';
 require_once __DIR__ . '/batch.php';
 require_once __DIR__ . '/notify.php';
+require_once __DIR__ . '/report.php';
 
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 

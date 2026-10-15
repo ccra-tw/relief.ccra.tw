@@ -480,6 +480,36 @@ ok($q1 === 0 && count($j1) === 5 && !array_intersect(array_column($j1, 'id'), ar
 exec('RELIEF_TEST_DB=1 php ' . escapeshellarg("$ROOT/bin/notify_queue.php") . ' done ' . (int)$j1[0]['id']);
 ok($db->query("SELECT sent_at IS NOT NULL FROM notification WHERE id=" . (int)$j1[0]['id'])->fetchColumn() === true, '寄成功回報後記下 sent_at');
 
+echo "報表與匯出（#10）\n";
+$AS = load_user('email', 'assist@example.test');
+[$hA, $rA] = report_rows($HQW, 'apply', []);
+$cases = array_column($rA, 3);
+ok(in_array('T1-A-2026-0901', $cases, true) && in_array('T2-B-2026-0902', $cases, true), '服管組看得到全部區的申請主表');
+ok(in_array('身分證字號', $hA, true) && in_array('就業情況', $hA, true) && in_array('審核核發金額', $hA, true), '主表含身分證字號、就業情況、核發金額（需求 0004）');
+$rowA = $rA[array_search('T1-A-2026-0901', $cases, true)];
+ok((bool)preg_match('/^[A-Z][12]\d{8}$/', $rowA[5]), '服管組匯出的身分證字號是完整號碼');
+[, $rW2] = report_rows($W2, 'apply', []);
+ok(!in_array('T1-A-2026-0901', array_column($rW2, 3), true) && in_array('T2-B-2026-0902', array_column($rW2, 3), true), '區辦只拿得到自己區的資料（查詢層限縮）');
+[, $rAS] = report_rows($AS, 'apply', []);
+ok($rAS === [] || !preg_match('/^[A-Z][12]\d{8}$/', (string)$rAS[0][5]), '社工助理拿到的身分證字號是遮罩');
+[, $rF] = report_rows($HQW, 'apply', ['church' => '平安']);
+ok($rF && !array_filter($rF, fn($r) => !str_contains($r[6], '平安')), '教會名稱篩選有效');
+[, $rN] = report_rows($HQW, 'apply', ['d1' => '2000-01-01', 'd2' => '2000-01-02']);
+ok($rN === [], '日期區間外沒有資料');
+[$hS, $rS] = report_rows($HQW, 'service', []);
+ok(count($rS) > 0 && in_array('服務方式', $hS, true) && $rS[0][count($hS) - 1] !== '', '服務紀錄表有資料且信仰狀況有值');
+ok(fmt_value(spec_field(FORM_SPEC, 'employment'), ['sel' => ['無'], 'sub' => ['無' => ['其他']], 'sub_other' => ['無' => '照顧家人']]) === '無（其他、照顧家人）', '就業情況細項與「其他」說明寫進同一格');
+[, $rC] = report_rows($W2, 'church', []);
+ok($rC && !array_filter($rC, fn($r) => $r[4] === '900001'), '教會基本資料也依區域限縮');
+$nE = (int)$db->query("SELECT count(*) FROM audit_log WHERE action='export' AND target_type='report'")->fetchColumn();
+[$csv] = report_csv($HQW, 'household', []);
+ok(str_starts_with($csv, "\xEF\xBB\xBF") && str_contains($csv, '同住') === false && str_contains($csv, '關係'), '同住家屬表可匯出（需求 0003）');
+ok((int)$db->query("SELECT count(*) FROM audit_log WHERE action='export' AND target_type='report'")->fetchColumn() === $nE + 1, '匯出寫 audit_log');
+[, $out] = page('reports/index.php', 'grace-staff');
+ok(str_contains($out, '沒有這個功能的權限'), '教會帳號打報表網址被擋');
+[, $out] = page('reports/index.php', 'hq@example.test');
+ok(str_contains($out, '急難救助申請主表') && str_contains($out, 'T1-A-2026-0901'), '服管組看得到報表頁');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

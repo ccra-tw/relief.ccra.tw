@@ -17,6 +17,6 @@ foreach ($s as $c) {
     echo '<div class=card style=max-width:none><b>' . h($c['case_no'] . ' ' . $c['name']) . '</b>：' . h($c['close_type']) . '（' . h(date('Y-m-d', strtotime($c['submitted_at']))) . ' 送出）';
     echo " <a href=\"/cases/view.php?id={$c['application_id']}\">看個案</a>";
     echo "<form method=post><input type=hidden name=csrf value=\"$tok\"><input type=hidden name=id value=\"{$c['id']}\"><label>審核意見（必填）<textarea name=opinion rows=2></textarea></label>";
-    echo '<button name=action value=approve>完成審核</button> <button name=action value=return>退件</button> <button name=action value=reject>不通過</button></form></div>';
+    echo '<button name=action value=approve>通過</button> <button name=action value=return>退件</button> <button name=action value=reject>不通過</button></form></div>';
 }
 page_foot();

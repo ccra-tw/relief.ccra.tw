@@ -1,5 +1,5 @@
 <?php
-// 審核一案（#6）：意見必填；區辦以後的關卡可配置期數與金額（第一期必填）。按鈕文字一律「完成審核」（需求 0004）。
+// 審核一案（#6）：意見必填；區辦以後的關卡可配置期數與金額（第一期必填）。按鈕「通過／退件／不通過」（需求 0004 原為「完成審核」，服管組 2026-10-16 高榕改為「通過」）。
 require __DIR__ . '/../../lib/boot.php';
 $u = require_role(MENU['review'][2]);
 $id = (int)($_GET['id'] ?? 0);
@@ -29,7 +29,7 @@ if ($a['kind'] === 'change' && ($p = app_row((int)$a['parent_id']))) {
        . '<br>描述：' . nl2br(h($cd['change_desc'] ?? '')) . '<br><a href="/cases/view.php?id=' . (int)$p['id'] . '" target=_blank>原始申請內容</a></div>';
 }
 echo '<h2>審核紀錄</h2><table><tr><th>時間</th><th>關卡</th><th>誰</th><th>動作</th><th>意見</th></tr>';
-$an = ['submit' => '送審', 'approve' => '完成審核', 'return' => '退件', 'reject' => '不通過'];
+$an = ['submit' => '送審', 'approve' => '通過', 'return' => '退件', 'reject' => '不通過'];
 foreach ($steps as $s) echo '<tr><td>' . h(date('m-d H:i', strtotime($s['at']))) . '</td><td>' . h($s['stage'] . ($s['part'] === 'cosign' ? '（會簽）' : '')) . '</td><td>' . h($s['display_name']) . '</td><td>' . h($an[$s['action']]) . '</td><td>' . h($s['opinion']) . '</td></tr>';
 echo '</table>';
 $tok = h(csrf_token());
@@ -41,5 +41,5 @@ if ($stage !== 'pastor') {
     echo '</div></fieldset>';
 }
 echo '<label>審核意見／退件或不通過原因（必填）<textarea name=opinion rows=4 required></textarea></label>';
-echo '<div><button name=action value=approve>完成審核</button> <button name=action value=return style="background:#8a6d1f">退件</button> <button name=action value=reject style="background:#9b2c2c">不通過</button></div></form>';
+echo '<div><button name=action value=approve>通過</button> <button name=action value=return style="background:#8a6d1f">退件</button> <button name=action value=reject style="background:#9b2c2c">不通過</button></div></form>';
 page_foot();

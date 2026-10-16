@@ -257,16 +257,16 @@ $asg = (int)$db->query("SELECT user_id FROM assignment WHERE application_id=$app
 ok($asg === (int)$W2['id'], '他區隨機派案，排除本區（只派到區辦 2 的社工）');
 ok(review_act($W2, $app, 'return', '') !== null, '退件原因必填');
 $nNoti = (int)$db->query("SELECT count(*) FROM notification WHERE kind='church_result'")->fetchColumn();
-ok(review_act($W2, $app, 'return', '缺證明文件') === null && app_row($app)['status'] === 'returned', '他區社工退件 → 回教會修改');
-$nChurch = (int)$db->query("SELECT count(*) FROM app_user WHERE active AND church_oid='900001' AND role IN ('church_staff','church_pastor')")->fetchColumn();
-ok($nChurch >= 2 && (int)$db->query("SELECT count(*) FROM notification WHERE kind='church_result'")->fetchColumn() === $nNoti + $nChurch, '退件通知該教會的每個帳號');
-ok(app_load($CS, $app) !== null && !array_key_exists('status', app_load($CS, $app)), '教會看得到被退的案子但看不到狀態欄');
-$ins->execute(['worker3@example.test', null, null, '測試南區社工二', 'region_worker', 2]);
+$nRet = (int)$db->query("SELECT count(*) FROM notification WHERE kind='review_returned'")->fetchColumn();
+ok(review_act($W2, $app, 'return', '缺證明文件') === null && app_row($app)['status'] === 'region_review' && !app_row($app)['cosign_user_id'], '他區社工退件 → 退回上一關（區辦社工），不是會簽者（服管組 10/16）');
+ok((int)$db->query("SELECT count(*) FROM notification WHERE kind='church_result'")->fetchColumn() === $nNoti
+   && (int)$db->query("SELECT count(*) FROM notification WHERE kind='review_returned'")->fetchColumn() > $nRet, '退回區辦時通知區辦社工，不通知教會');
+ok(str_contains((string)review_act($HEAD, $app, 'approve', '會簽'), '不在您的審核關卡'), '退回後輪到區辦社工，會簽者不能先動');
 // 不靠機率：暫時把原審核者改成本案同區，讓他「不可能被隨機抽中」——這時他還被派到，只能是因為沿用原派案
+$ins->execute(['worker3@example.test', null, null, '測試南區社工二', 'region_worker', 2]);
 $db->exec("UPDATE app_user SET region_id = 1 WHERE id = {$W2['id']}");
-ok(app_submit($CS, $app) === null && app_row($app)['case_no'] === $no1, '修改後再送審，案號沿用');
-review_act($PA, $app, 'approve', '牧者再審');
 review_act($WK, $app, 'approve', '區辦再審', ['6000', '6000']);
+ok((int)app_row($app)['cosign_user_id'] === (int)$HEAD['id'], '區辦社工再審後照樣要會簽');
 review_act($HEAD, $app, 'approve', '會簽');
 $db->exec("UPDATE app_user SET region_id = 2 WHERE id = {$W2['id']}");
 $asg2 = $db->query("SELECT user_id, count(*) OVER () AS n FROM assignment WHERE application_id=$app AND stage='other_region'")->fetch();
@@ -279,7 +279,7 @@ ok(review_act($HQ, $app, 'approve', '總會同意', ['6000', '6000', '6000']) ==
 $A = app_row($app);
 ok($A['status'] === 'approved' && $A['opened_at'] === date('Y-m-d'), '申請通過，開案日＝通過日');
 ok((int)$db->query("SELECT count(*) FROM installment WHERE application_id=$app")->fetchColumn() === 3, '期數以最後一關配置為準（三期）');
-ok((int)$db->query("SELECT count(*) FROM review_step WHERE application_id=$app")->fetchColumn() === 11, '每個成功的動作恰好一筆 review_step（送審 2、牧者 2、區辦 2、會簽 2、他區退件與通過 2、服管組 1）');
+ok((int)$db->query("SELECT count(*) FROM review_step WHERE application_id=$app")->fetchColumn() === 9, '每個成功的動作恰好一筆 review_step（送審 1、牧者 1、區辦 2、會簽 2、他區退件與通過 2、服管組 1）');
 
 echo "牧者自己送出、不通過（#6）\n";
 $ID4 = fake_id('F15151515');
@@ -307,7 +307,7 @@ $A = app_row($app); $D = json_decode($A['data'], true);
 ok($e === [] && $A['name'] === '改名後' && $D['mobile'] === '0911111111' && $D['event'] === '測試急難事件', '通過後教會只能改基本資料，其他欄位不會被改動');
 ok(isset(app_update(load_user('email', 'hq@example.test'), $app, $good)['_']), '通過後服管組社工不能改（審核修改表空白）');
 $actSrc = file_get_contents("$ROOT/public/review/act.php");
-ok(str_contains($actSrc, '>完成審核<') && !str_contains($actSrc, '核准'), '審核按鈕文字是「完成審核」，不用「核准」（需求 0004）');
+ok(str_contains($actSrc, '>通過<') && str_contains($actSrc, '>不通過<') && !str_contains($actSrc, '核准') && !str_contains($actSrc, '>完成審核<'), '審核按鈕是「通過／退件／不通過」（服管組 10/16 改），不用「核准」');
 
 // 把一案從送審一路審到通過（測試用）
 function approve_all(int $id, array $by): void {
@@ -449,11 +449,13 @@ ok($since($m, 'review_assigned') === $sorted(rcpt_pastor($a1)), '教會同工送
 $m = $last(); review_act($PA, $n1, 'approve', '牧者');
 ok($since($m, 'review_assigned') === $sorted(rcpt_region($a1)), '牧者通過 → 寄給區辦一社工（3-2-0）');
 $m = $last(); review_act($WK, $n1, 'return', '請補附件', ['5000']);
-ok($since($m, 'review_returned') === [] && count($since($m, 'church_result')) > 0, '區辦一退件 → 只寄教會（3-2-2）');
-app_submit($CS, $n1);
+ok(app_row($n1)['status'] === 'pastor_review' && $since($m, 'review_returned') === $sorted(rcpt_pastor($a1)) && $since($m, 'church_result') === [], '區辦退件 → 退回牧者關、寄牧者（服管組 10/16：退回上一關）');
+$cn = app_row($n1)['case_no'];
 $m = $last(); review_act($PA, $n1, 'return', '資料再確認');
-ok($since($m, 'review_returned') === $sorted(array_merge(rcpt_region($a1), rcpt_region_head($a1))), '牧者退件 → 區辦一社工與區辦一主任（3-1-2）');
-ok(return_recipients($a1, 'other_region', 'review') === rcpt_region($a1) && return_recipients($a1, 'region', 'cosign') === rcpt_region($a1), '他區退件、區辦一會簽者退件 → 區辦一社工（3-4-2、3-3-2）');
+ok(app_row($n1)['status'] === 'returned' && count($since($m, 'church_result')) > 0, '牧者退件 → 退回教會修改並通知教會');
+ok(app_load($CS, $n1) !== null && !array_key_exists('status', app_load($CS, $n1)), '教會看得到被退的案子但看不到狀態欄');
+ok(app_submit($CS, $n1) === null && app_row($n1)['case_no'] === $cn && app_row($n1)['status'] === 'pastor_review', '教會修改後再送審，案號沿用、從牧者關重新開始');
+ok(return_recipients($a1, 'region_review') === rcpt_region($a1) && return_recipients($a1, 'returned') === [], '退回區辦寄區辦社工；退回教會不走同工通知');
 $m = $last(); approve_all($n1, $CS);
 ok(app_row($n1)['status'] === 'approved' && $since($m, 'review_approved') === $sorted(array_merge(rcpt_region($a1), rcpt_region_head($a1))), '第四關通過 → 區辦一社工與主任＋教會（3-8）');
 $bodies = implode("\n", $db->query("SELECT subject || body FROM notification")->fetchAll(PDO::FETCH_COLUMN));

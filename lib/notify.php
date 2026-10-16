@@ -1,7 +1,7 @@
 <?php
 // 通知信收件對象（#9）。依服管組「急難救助金系統通知 Email 內容」每封信寫的「系統寄給…」：
 //   進入某一關 → 寄給該關審核者（牧者／區辦一社工／他區社工／服管組社工）；會簽 → 固定會簽者
-//   退件 → 寄給上一位經手的同工（見 return_recipients）；本系統退件一律回到教會修改，所以教會也一併通知
+//   退件 → 退回上一關，寄給那一關的審核者（見 return_recipients）；退回教會時寄教會
 //   第四關通過 → 區辦一社工、區辦一主任、教會（含牧長）
 //   匯款成功 → 區辦社工、區辦主任、服管組社工、服管組主任；需求 0003 再加教會同工與牧者
 //   服務紀錄未回、領據未回、結案提醒 → 教會與牧長
@@ -25,13 +25,16 @@ function rcpt_assigned(array $a, string $stage): array {
     return array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
 }
 
-// 退件時該通知的同工（不含教會；教會另外通知）。stage 為 pastor／region／other_region／hq，part 為 review／cosign
-function return_recipients(array $a, string $stage, string $part): array {
-    if ($stage === 'pastor') return array_merge(rcpt_region($a), rcpt_region_head($a));   // 牧者退件：區辦一社工、區辦一主任
-    if ($stage === 'region') return $part === 'cosign' ? rcpt_region($a) : [];             // 區辦一退件只寄教會；會簽者退件寄區辦一社工
-    if ($stage === 'other_region') return $part === 'cosign' ? rcpt_assigned($a, 'other_region') : rcpt_region($a);
-    if ($stage === 'hq') return $part === 'cosign' ? rcpt_assigned($a, 'hq') : rcpt_assigned($a, 'other_region');
-    return [];
+// 退件退回到的那一關要通知的人（服管組 2026-10-16 高榕回覆：一律退回上一關；遇到會簽不退給會簽者、退給該關社工）。
+// 退回教會（returned）時回傳空陣列，教會另外由 notify_church 通知。
+function return_recipients(array $a, string $target): array {
+    return match ($target) {
+        'pastor_review' => rcpt_pastor($a),
+        'region_review' => rcpt_region($a),
+        'other_review'  => rcpt_assigned($a, 'other_region'),
+        'hq_review'     => rcpt_assigned($a, 'hq'),
+        default         => [],
+    };
 }
 
 // 一次寄給多位；$key 有給時每位收件人各一個防重寄鍵（key#uid）。回傳實際新增筆數

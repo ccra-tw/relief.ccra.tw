@@ -3,7 +3,8 @@
 //   起點兩種：教會同工送出 → 教會牧者審；教會牧者自己送出 → 直接到區辦（牧者那關視為已完成）
 //   區辦社工 → 他區區辦社工（隨機，排除本區）→ 服管組社工或主任（隨機）→ 通過（開案日＝通過日）
 //   審核者若「須會簽」，審完先交給他固定的會簽者；會簽完成才進下一關
-//   退件回到教會修改；再送審時，他區與服管組回到原本派到的那一位（需求 0001），沒派過的才隨機派
+//   退件退回上一關（服管組 2026-10-16 高榕回覆）：牧者→教會、區辦→牧者（牧者自己送出的退回教會）、他區→區辦、服管組→他區；
+//   會簽者退件退回同一關的社工（不退給會簽者，「會簽的純屬會簽」）。退到教會後再送審，他區與服管組回到原本派到的那一位（需求 0001）
 const STAGES = ['pastor_review' => 'pastor', 'region_review' => 'region', 'other_review' => 'other_region', 'hq_review' => 'hq'];
 const STATUS_NAMES = [
     'draft' => '教會同工尚未送審', 'pastor_review' => '教會牧者審核中', 'region_review' => '區辦社工審核中', 'other_review' => '他區社工審核中',
@@ -135,7 +136,7 @@ function set_installments(array $u, int $appId, string $stage, array $amounts): 
     return null;
 }
 
-// 審核動作：approve（完成審核）／return（退件）／reject（不通過）。意見必填。
+// 審核動作：approve（通過）／return（退件）／reject（不通過）。意見必填。
 function review_act(array $u, int $id, string $action, string $opinion, ?array $installments = null): ?string {
     $a = app_row($id);
     if (!$a) return '找不到這份申請。';
@@ -156,9 +157,13 @@ function review_act(array $u, int $id, string $action, string $opinion, ?array $
         }
         step($id, $stage, $part, $u['id'], $action, $opinion);
         if ($action === 'return') {
-            $db->prepare("UPDATE application SET status='returned', cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$id]);
-            notify_church($a, '急難救助申請被退件', '案號 ' . case_label($a) . " 被退件，原因：{$opinion}。請修改後再送審。");
-            notify_users('review_returned', return_recipients($a, $stage, $part), '您經手的案件被退件', '案號 ' . case_label($a) . '（' . STATUS_NAMES[$a['status']] . "）被退件，原因：{$opinion}。已退回教會修改。");
+            $to = return_target($a, $stage, $part);
+            $db->prepare('UPDATE application SET status=?, cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?')->execute([$to, $id]);
+            if ($to === 'returned') {
+                notify_church($a, '急難救助申請被退件', '案號 ' . case_label($a) . " 被退件，原因：{$opinion}。請修改後再送審。");
+            } else {
+                notify_users('review_returned', return_recipients($a, $to), '案件退回您這一關', '案號 ' . case_label($a) . ' 從「' . STATUS_NAMES[$a['status']] . "」退回，原因：{$opinion}。請重新審核。");
+            }
         } elseif ($action === 'reject') {
             $db->prepare("UPDATE application SET status='rejected', cosign_user_id=NULL, cosign_for_id=NULL, updated_at=now() WHERE id=?")->execute([$id]);
             notify_church($a, '急難救助申請未通過', "案號 {$a['case_no']} 審核未通過。");
@@ -172,6 +177,18 @@ function review_act(array $u, int $id, string $action, string $opinion, ?array $
         $db->commit();
     } catch (Throwable $e) { $db->rollBack(); throw $e; }
     return null;
+}
+
+// 退件退到哪一關：會簽者退件 → 同一關的社工；其餘退回上一關。區辦的上一關要看這一輪有沒有經過牧者
+function return_target(array $a, string $stage, string $part): string {
+    if ($part === 'cosign') return $a['status'];
+    if ($stage === 'region') {
+        $s = rdb()->prepare("SELECT count(*) FROM review_step WHERE application_id = ? AND stage = 'pastor' AND action = 'approve'
+                             AND id > COALESCE((SELECT max(id) FROM review_step WHERE application_id = ? AND action = 'submit'), 0)");
+        $s->execute([$a['id'], $a['id']]);
+        return $s->fetchColumn() ? 'pastor_review' : 'returned';
+    }
+    return ['pastor' => 'returned', 'other_region' => 'region_review', 'hq' => 'other_review'][$stage];
 }
 
 function advance(array $a): void {

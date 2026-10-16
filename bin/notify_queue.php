@@ -1,5 +1,6 @@
 <?php
 // 通知信佇列（#9）：主機不寄信，由資訊部的寄送端來取件、寄出、回報。
+//   php bin/notify_queue.php peek [N]         只看佇列，不取件
 //   php bin/notify_queue.php claim [N]        取最多 N 筆未取件的（預設 20），先記 claimed_at 再輸出 JSON
 //   php bin/notify_queue.php done <id>        寄成功
 //   php bin/notify_queue.php fail <id> <原因> 寄失敗（不自動重寄；寧可漏寄不重寄，由人看 error 決定）
@@ -7,7 +8,10 @@
 require __DIR__ . '/../lib/boot.php';
 $cmd = $argv[1] ?? '';
 $db = rdb();
-if ($cmd === 'claim') {
+if ($cmd === 'peek') {   // 只看不取件（寄送端乾跑用），不寫 claimed_at
+    $n = max(1, min(200, (int)($argv[2] ?? 20)));
+    echo json_encode($db->query("SELECT n.id, n.kind, n.subject, COALESCE(n.to_email, u.email) AS email FROM notification n LEFT JOIN app_user u ON u.id = n.to_user_id WHERE n.claimed_at IS NULL ORDER BY n.id LIMIT $n")->fetchAll(), JSON_UNESCAPED_UNICODE), "\n";
+} elseif ($cmd === 'claim') {
     $n = max(1, min(200, (int)($argv[2] ?? 20)));
     $db->beginTransaction();
     $rows = $db->query("SELECT n.id, n.kind, n.subject, n.body, COALESCE(n.to_email, u.email) AS email, u.display_name

@@ -226,6 +226,10 @@ ok(str_contains((string)attach_add($CS, $aid, 'proof', $tmpExe, '偽裝.pdf'), '
 $tmpBig = tempnam(sys_get_temp_dir(), 'rt'); $fh = fopen($tmpBig, 'w'); fwrite($fh, "%PDF-1.4\n"); fseek($fh, ATTACH_MAX + 10); fwrite($fh, 'x'); fclose($fh);
 ok(str_contains((string)attach_add($CS, $aid, 'proof', $tmpBig, 'big.pdf'), '10MB'), '超過 10MB 擋下');
 ok(attach_add($W2, $aid, 'bogus', $tmpPng, 'x.png') !== null, '附件類別不在清單內擋下');
+ok(upload_err_msg(UPLOAD_ERR_NO_FILE) === null && upload_err_msg(UPLOAD_ERR_OK) === null, '沒選檔案不算錯');
+ok(str_contains((string)upload_err_msg(UPLOAD_ERR_INI_SIZE), '10MB') && str_contains((string)upload_err_msg(UPLOAD_ERR_PARTIAL), '完整'), '超過主機上限或傳一半會顯示原因，不再靜默丟掉');
+$ini = parse_ini_file(dirname(__DIR__) . '/public/.user.ini');
+ok($ini['upload_max_filesize'] === '10M' && (int)$ini['post_max_size'] >= 2 * 10 + 2, '主機上傳上限與 ATTACH_MAX 一致，兩個附件加表單放得下');
 foreach ([$tmpPng, $tmpExe, $tmpBig] as $t) @unlink($t);
 array_map('unlink', glob("$UP/*") ?: []); @rmdir($UP);
 

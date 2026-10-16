@@ -118,6 +118,17 @@ function app_idno_display(array $u, array $a, bool $full = false): string {
     return pii_mask($a['idno_head'], $a['idno_last4']);
 }
 
+// 瀏覽器上傳的錯誤碼轉成看得懂的訊息；沒選檔案（NO_FILE）不算錯。
+// 2026-10-17：PHP 上限原本只有 2MB，超過時 tmp_name 是空的，舊寫法會直接略過、不顯示任何錯誤，檔案就這樣不見
+function upload_err_msg(int $code): ?string {
+    return match ($code) {
+        UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE => null,
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => '檔案大小需在 10MB 以內。',
+        UPLOAD_ERR_PARTIAL => '檔案沒有完整上傳，請再試一次。',
+        default => '主機無法接收檔案，請聯絡資訊部。',
+    };
+}
+
 // 附件上傳：只收 PDF／JPG／PNG／DOCX、10MB 以內；以實際內容判斷格式，不信副檔名
 function attach_add(array $u, int $appId, string $kind, string $tmp, string $origName): ?string {
     $a = app_load($u, $appId);

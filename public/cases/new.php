@@ -21,8 +21,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!$id) $in['idno'] = PHP_SAPI === 'cli' ? ($_POST['idno'] ?? '') : ($_SESSION['intake_idno'] ?? '');
         [$newId, $err] = app_save($u, $in, $id);
         if (!$err) {
-            foreach (ATTACH_KINDS as $kind => $label) if (!empty($_FILES[$kind]['tmp_name']) && is_uploaded_file($_FILES[$kind]['tmp_name']))
-                if ($e = attach_add($u, $newId, $kind, $_FILES[$kind]['tmp_name'], $_FILES[$kind]['name'])) $err[$kind] = "{$label}：$e";
+            foreach (ATTACH_KINDS as $kind => $label) {
+                if ($m = upload_err_msg((int)($_FILES[$kind]['error'] ?? UPLOAD_ERR_NO_FILE))) { $err[$kind] = "{$label}：$m"; continue; }
+                if (!empty($_FILES[$kind]['tmp_name']) && is_uploaded_file($_FILES[$kind]['tmp_name']))
+                    if ($e = attach_add($u, $newId, $kind, $_FILES[$kind]['tmp_name'], $_FILES[$kind]['name'])) $err[$kind] = "{$label}：$e";
+            }
             unset($_SESSION['intake_idno']);
             if (!$err) { header('Location: /cases/view.php?id=' . $newId . '&saved=1'); echo "SAVED $newId"; exit; }
             $id = $newId;

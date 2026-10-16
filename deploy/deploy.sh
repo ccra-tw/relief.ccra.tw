@@ -19,6 +19,11 @@ install -m 644 -o root -g root "$REPO/deploy/relief-reminders.cron" /etc/cron.d/
 install -d -m 700 -o postgres -g postgres /var/backups/relief-db
 install -d -m 700 -o root -g root /var/backups/relief-uploads
 install -m 644 -o root -g root "$REPO/deploy/relief-backup.cron" /etc/cron.d/relief-backup
+# 獨立 PHP 程序池（有變才重載）
+if ! cmp -s "$REPO/deploy/relief-fpm.conf" /etc/php/8.5/fpm/pool.d/relief.conf; then
+    install -m 644 -o root -g root "$REPO/deploy/relief-fpm.conf" /etc/php/8.5/fpm/pool.d/relief.conf
+    php-fpm8.5 -t && systemctl reload php8.5-fpm
+fi
 touch /var/log/relief-reminders.log && chown www-data:www-data /var/log/relief-reminders.log
 logger -t relief-deploy "deployed $(git rev-parse --short HEAD)"
 echo "deployed $(git rev-parse --short HEAD)"

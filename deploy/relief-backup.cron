@@ -1,5 +1,6 @@
 # 急難救助系統每日備份（2026-10-17 補：上線檢查時發現 relief 資料庫與上傳檔都沒有備份）
-# 由 deploy.sh 安裝到 /etc/cron.d/relief-backup；備份在 /var/backups/relief（root 750），保留 30 天
-# 02:37 錯開 itccra 的 02:17。資料庫用 pg_dump 自訂格式；上傳檔（身分證、存摺等影本）整包 tar，權限同樣只給 root。
-37 2 * * * postgres mkdir -p /var/backups/relief/db && pg_dump -Fc relief > /var/backups/relief/db/relief-$(date +\%Y\%m\%d).dump && find /var/backups/relief/db -name 'relief-*.dump' -mtime +30 -delete
-47 2 * * * root mkdir -p /var/backups/relief/uploads && tar -czf /var/backups/relief/uploads/uploads-$(date +\%Y\%m\%d).tgz -C /var/lib/relief uploads && find /var/backups/relief/uploads -name 'uploads-*.tgz' -mtime +30 -delete && chmod 750 /var/backups/relief
+# 由 deploy.sh 安裝到 /etc/cron.d/relief-backup，目錄也由 deploy.sh 建好（postgres 不能在 /var/backups 自己建目錄）
+# 資料庫：/var/backups/relief-db（postgres 700）；上傳檔（身分證、存摺等影本）：/var/backups/relief-uploads（root 700）；各保留 30 天
+# 02:37 錯開 itccra 的 02:17
+37 2 * * * postgres pg_dump -Fc relief > /var/backups/relief-db/relief-$(date +\%Y\%m\%d).dump && find /var/backups/relief-db -name 'relief-*.dump' -mtime +30 -delete
+47 2 * * * root tar -czf /var/backups/relief-uploads/uploads-$(date +\%Y\%m\%d).tgz -C /var/lib/relief uploads && find /var/backups/relief-uploads -name 'uploads-*.tgz' -mtime +30 -delete

@@ -6,3 +6,4 @@
 /storage/
 /vendor/
 .DS_Store
+!public/.user.ini

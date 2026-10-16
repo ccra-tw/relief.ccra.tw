@@ -16,6 +16,7 @@ chown -R root:www-data "$WEB"
 sudo -u www-data php "$WEB/bin/migrate.php"
 # 每日提醒排程（#9）。cron.d 檔名不可含點，權限 644、root 所有
 install -m 644 -o root -g root "$REPO/deploy/relief-reminders.cron" /etc/cron.d/relief-reminders
+install -m 644 -o root -g root "$REPO/deploy/relief-backup.cron" /etc/cron.d/relief-backup
 touch /var/log/relief-reminders.log && chown www-data:www-data /var/log/relief-reminders.log
 logger -t relief-deploy "deployed $(git rev-parse --short HEAD)"
 echo "deployed $(git rev-parse --short HEAD)"

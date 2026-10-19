@@ -12,10 +12,10 @@ $fail = 0;
 function ok(bool $c, string $m) { global $fail; echo ($c ? "  ✅ " : "  ❌ ") . $m . "\n"; if (!$c) $fail++; }
 
 // 子程序跑一頁：回傳 [exit code, 輸出]
-function page(string $path, ?string $as = null, array $post = []): array {
+function page(string $path, ?string $as = null, array $post = [], array $get = []): array {
     global $ROOT;
     $env = 'RELIEF_TEST_DB=1 ' . ($as ? 'RELIEF_TEST_USER=' . escapeshellarg($as) . ' ' : '');
-    $req = escapeshellarg(json_encode(['page' => "$ROOT/public/$path", 'method' => $post ? 'POST' : 'GET', 'post' => $post]));
+    $req = escapeshellarg(json_encode(['page' => "$ROOT/public/$path", 'method' => $post ? 'POST' : 'GET', 'post' => $post, 'get' => $get]));
     exec("$env RELIEF_REQ=$req php " . escapeshellarg("$ROOT/tests/req.php") . ' 2>&1', $out, $code);
     return [$code, implode("\n", $out)];
 }
@@ -531,6 +531,18 @@ ok(str_contains($out, 'method=post') && !preg_match('/href="[^"]*name=/', $out) 
 ok(str_contains($out, 'value="測試甲"'), '搜尋後畫面仍帶回剛才的條件（需求 0004 的前提）');
 [, $out] = page('admin/audit.php', 'admin@example.test', ['q' => 'login', 'csrf' => 'x']);
 ok(str_contains($out, 'method=post') && str_contains($out, 'value="login"') && !preg_match('/href="[^"]*q=/', $out), '稽核紀錄改 POST 搜尋，搜尋字不進網址');
+// 小鹿 10-19 互審：代碼過期（被淘汰、或別的瀏覽器的代碼）時不可退回空條件，否則舊頁的匯出連結會匯出全部
+ok(filter_load(['x']) === null && filter_load("0123456789ab\n") === null && filter_load('0123456789AB') === null, 'f[]=x、尾端換行、大寫都不認，也不丟型別錯誤');
+[, $out] = page('reports/index.php', 'hq@example.test', [], ['r' => 'apply', 'f' => '0123456789ab', 'csv' => '1']);
+ok(str_contains($out, '已過期') && !str_contains($out, 'T1-A-2026-0901') && !str_starts_with($out, "\xEF\xBB\xBF"), '過期代碼的匯出連結不產出 CSV，提示重新搜尋');
+[, $out] = page('reports/index.php', 'hq@example.test', [], ['r' => 'apply', 'f' => '0123456789ab']);
+ok(str_contains($out, '已過期') && !str_contains($out, 'T1-A-2026-0901') && !str_contains($out, '匯出 CSV'), '過期代碼的報表頁不列資料、不給匯出連結');
+[, $out] = page('reports/index.php', 'hq@example.test', [], ['r' => 'apply', 'f' => ['x']]);
+ok(str_contains($out, '已過期') && !str_contains($out, 'TypeError'), '網址 f 是陣列時當成過期處理');
+[, $out] = page('reports/index.php', 'hq@example.test', [], ['r' => 'apply']);
+ok(!str_contains($out, '已過期') && str_contains($out, 'T1-A-2026-0901'), '沒有代碼（第一次進來）照常列出');
+[, $out] = page('admin/audit.php', 'admin@example.test', [], ['f' => '0123456789ab']);
+ok(str_contains($out, '已過期') && str_contains($out, 'value=""'), '稽核紀錄的過期代碼提示重新搜尋、搜尋框清空');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

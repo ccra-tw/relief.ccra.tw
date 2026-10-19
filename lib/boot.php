@@ -22,6 +22,7 @@ function csrf_token(): string {
 }
 function csrf_check(): void {
     if (PHP_SAPI === 'cli') return;
+    session_boot();   // 不依賴前面有人先開過 session（正式站是登入那一步開的，內建伺服器測試時沒有）
     if (!hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'] ?? '')) { http_response_code(400); exit('表單已過期，請重新整理後再送出。'); }
 }
 
@@ -38,11 +39,14 @@ function filter_stash(array $f): string {
     $_SESSION['filters'] = array_slice($all, -FILTER_KEEP, null, true);
     return $k;
 }
-function filter_load(?string $k): ?array {
+// 取不到（沒給、格式不對、過期被淘汰、別的瀏覽器的代碼）一律回 null；
+// 呼叫端要分清「網址沒有 f」與「有 f 但取不到」——後者不可退回空條件，否則匯出會變成全部資料（小鹿 10-19 互審）。
+function filter_load(mixed $k): ?array {
     session_boot();
-    if ($k === null || !preg_match('/^[0-9a-f]{12}$/', $k)) return null;
+    if (!is_string($k) || !preg_match('/\A[0-9a-f]{12}\z/', $k)) return null;
     return $_SESSION['filters'][$k] ?? null;
 }
+const FILTER_EXPIRED = '搜尋條件已過期（或是在別的瀏覽器開的），請重新搜尋。';
 
 function page_head(string $title, ?array $u = null): void {
     echo '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';

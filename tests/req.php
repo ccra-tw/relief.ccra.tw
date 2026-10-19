@@ -5,5 +5,6 @@ $r = json_decode((string)getenv('RELIEF_REQ'), true);
 $_SERVER['REQUEST_METHOD'] = $r['method'] ?? 'GET';
 $_SERVER['SCRIPT_NAME'] = '/' . basename($r['page']);
 $_POST = $r['post'] ?? [];
+$_GET = $r['get'] ?? [];
 chdir(dirname($r['page']));
 include $r['page'];

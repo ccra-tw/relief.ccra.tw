@@ -2,7 +2,7 @@
 // 登入（#2）。兩條路，對應兩種使用者：
 //   內部同工：站前是 Cloudflare Access（協會 M365），來源端驗 JWT 簽章與 AUD 後，用 email 對到 app_user。
 //   教會帳號：本地帳號密碼（服管組 2026-10-15 回覆「維持現在的帳號密碼」），password_hash 存放，連錯 5 次鎖 15 分鐘。
-// 測試接縫：只在命令列可用 RELIEF_TEST_USER（email 或帳號）當替身，網頁（php-fpm）永遠不吃這個環境變數。
+// 測試接縫：只在 test_seam()（命令列，或內建伺服器帶 RELIEF_TEST_DB=1）可用 RELIEF_TEST_USER 當替身，網頁（php-fpm）永遠不吃這個環境變數。
 const ACCESS_TEAM = 'https://maryonacross.cloudflareaccess.com';
 const ACCESS_AUD  = '87aa7a0efb138e1b5af9e0476650f274137e5ca3d5d43ae2df1464ab3e651017';
 const STATE_DIR   = '/var/lib/relief';
@@ -56,7 +56,7 @@ function load_user(string $col, string $val): ?array {
 function current_user_or_null(): ?array {
     static $u = false;
     if ($u !== false) return $u;
-    if (PHP_SAPI === 'cli') {
+    if (test_seam()) {
         $t = getenv('RELIEF_TEST_USER');
         return $u = $t ? (load_user(str_contains($t, '@') ? 'email' : 'username', strtolower($t))) : null;
     }

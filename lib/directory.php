@@ -5,7 +5,7 @@ const DIR_BASE = 'https://church.oursweb.net';
 const DIR_INI  = '/etc/relief/directory.ini';
 
 function dir_fixture(): ?array {
-    $f = PHP_SAPI === 'cli' ? getenv('RELIEF_TEST_DIR') : false;
+    $f = test_seam() ? getenv('RELIEF_TEST_DIR') : false;
     return $f ? json_decode((string)file_get_contents($f), true) : null;
 }
 

@@ -9,7 +9,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (PHP_SAPI !== 'cli') { header('Location: ?f=' . $k, true, 303); exit; }
     $_GET['f'] = $k;
 }
-$q = (string)((filter_load($_GET['f'] ?? null) ?? [])['q'] ?? '');
+$loaded = filter_load($_GET['f'] ?? null);
+$expired = isset($_GET['f']) && $loaded === null;
+$q = (string)(($loaded ?? [])['q'] ?? '');
 audit('view', 'audit_log', null, $q !== '' ? ['q' => $q] : []);
 $sql = 'SELECT at, actor, action, target_type, target_id, detail FROM audit_log';
 $p = [];
@@ -18,6 +20,7 @@ $s = rdb()->prepare($sql . ' ORDER BY id DESC LIMIT 200');
 $s->execute($p);
 page_head('稽核紀錄', $u);
 echo '<h1>稽核紀錄</h1><form method=post><input type=hidden name=csrf value="' . h(csrf_token()) . '"><input name=q value="' . h($q) . '" placeholder="帳號、動作或對象"><button>搜尋</button></form>';
+if ($expired) echo '<p class=note>' . h(FILTER_EXPIRED) . '</p>';
 echo '<table><tr><th>時間</th><th>誰</th><th>動作</th><th>對象</th><th>內容</th></tr>';
 foreach ($s as $r) echo '<tr><td>' . h(date('m-d H:i', strtotime($r['at']))) . '</td><td>' . h($r['actor']) . '</td><td>' . h($r['action']) . '</td><td>' . h(trim($r['target_type'] . ' ' . $r['target_id'])) . '</td><td><small>' . h($r['detail']) . '</small></td></tr>';
 echo '</table>';

@@ -2,12 +2,12 @@
 // 身分證／居留證號碼的保護（#5）。
 //   存：密文（libsodium secretbox，金鑰在主機 /etc/relief/secret.ini 的 pii_key）＋ HMAC（同一人查得到既有個案，但看不出號碼）＋末 4 碼（遮罩顯示用）
 //   顯示：預設遮罩 A12****789；只有區辦以上的審核角色、在「檢視個案」時可以看完整號碼，且每次都寫 audit_log
-// 測試接縫：命令列且 RELIEF_TEST_SECRET=1 時用固定的測試金鑰（只在 test schema 用，與正式金鑰無關）
+// 測試接縫：test_seam() 且 RELIEF_TEST_SECRET=1 時用固定的測試金鑰（只在 test schema 用，與正式金鑰無關）
 const PII_INI = '/etc/relief/secret.ini';
 const PII_FULL_ROLES = ['region_worker', 'region_head', 'hq_worker', 'hq_head', 'admin'];
 
 function pii_key(): string {
-    if (PHP_SAPI === 'cli' && getenv('RELIEF_TEST_SECRET') === '1') return str_repeat("\x42", SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    if (test_seam() && getenv('RELIEF_TEST_SECRET') === '1') return str_repeat("\x42", SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
     static $k = null;
     if ($k) return $k;
     $c = @parse_ini_file(PII_INI);

@@ -11,7 +11,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if (PHP_SAPI !== 'cli') { header('Location: ?' . http_build_query(['r' => $kind, 'f' => $k]), true, 303); exit; }
     $_GET['f'] = $k;   // 測試時沒有轉址，直接用同一組代碼往下跑
 }
-$f = filter_load($_GET['f'] ?? null) ?? report_filters(array_diff_key($_GET, ['name' => 1]));
+$fIn = $_GET['f'] ?? null;
+$loaded = filter_load($fIn);
+$expired = $fIn !== null && $loaded === null;   // 有代碼卻取不到：不可當成「沒有條件」
+if ($expired && isset($_GET['csv'])) { http_response_code(409); exit(FILTER_EXPIRED); }
+$f = $loaded ?? ($expired ? [] : report_filters(array_diff_key($_GET, ['name' => 1])));
 if (isset($_GET['csv'])) {
     [$csv, $e] = report_csv($u, $kind, $f);
     if ($e) { http_response_code(400); exit($e); }
@@ -19,7 +23,7 @@ if (isset($_GET['csv'])) {
     header('Content-Disposition: attachment; filename="' . $kind . '-' . date('Ymd') . '.csv"');
     exit($csv);
 }
-[$head, $rows] = report_rows($u, $kind, $f);
+[$head, $rows] = $expired ? [[], []] : report_rows($u, $kind, $f);
 $regions = rdb()->query('SELECT id, name FROM region WHERE active ORDER BY id')->fetchAll();
 $areas = rdb()->query('SELECT id, region_id, name FROM area WHERE active ORDER BY region_id, id')->fetchAll();
 $dateLabel = ['apply' => '申請日期', 'household' => '申請日期', 'church' => null, 'service' => '紀錄日期', 'closure' => '結案日期'][$kind];
@@ -38,7 +42,8 @@ if ($dateLabel) echo " <label>{$dateLabel} <input type=date name=d1 value=\"" . 
 if ($kind !== 'church') echo ' <label>開案日期 <input type=date name=o1 value="' . $v('o1') . '"> ～ <input type=date name=o2 value="' . $v('o2') . '"></label>';
 echo ' <button>搜尋</button></form>';
 // 匯出連結只帶代碼，不帶條件本身；已有有效代碼就沿用，不每次另存一組
-$fk = filter_load($_GET['f'] ?? null) !== null ? $_GET['f'] : ($f ? filter_stash($f) : null);
+if ($expired) { echo '<p class=note>' . h(FILTER_EXPIRED) . '</p>'; page_foot(); exit; }
+$fk = $loaded !== null ? $fIn : ($f ? filter_stash($f) : null);
 $q = http_build_query(['r' => $kind, 'f' => $fk, 'csv' => 1]);
 echo '<p>共 ' . count($rows) . ' 筆　<a href="?' . h($q) . '">匯出 CSV</a>（匯出會記錄在稽核紀錄）</p>';
 echo '<div class=scroll><table><tr>';

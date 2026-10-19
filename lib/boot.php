@@ -25,6 +25,25 @@ function csrf_check(): void {
     if (!hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'] ?? '')) { http_response_code(400); exit('表單已過期，請重新整理後再送出。'); }
 }
 
+// 搜尋條件存伺服器端，網址只帶一個隨機短代碼（2026-10-19 個資稽核，熊哥核可）。
+// 為什麼：報表依「個案姓名」查詢、稽核紀錄依帳號搜尋時，條件若放網址（GET），姓名會留在
+// nginx 存取紀錄、瀏覽器歷史與 Cloudflare 紀錄。需求 0004 要「匯出後按返回帶回條件」，
+// 所以不能單純改 POST——改成 POST 存條件、轉址到 ?f=代碼，返回時用代碼取回。
+const FILTER_KEEP = 20;   // 每個 session 最多留幾組條件，舊的自動丟掉，避免 session 無限長大
+function filter_stash(array $f): string {
+    session_boot();
+    $k = bin2hex(random_bytes(6));
+    $all = $_SESSION['filters'] ?? [];
+    $all[$k] = $f;
+    $_SESSION['filters'] = array_slice($all, -FILTER_KEEP, null, true);
+    return $k;
+}
+function filter_load(?string $k): ?array {
+    session_boot();
+    if ($k === null || !preg_match('/^[0-9a-f]{12}$/', $k)) return null;
+    return $_SESSION['filters'][$k] ?? null;
+}
+
 function page_head(string $title, ?array $u = null): void {
     echo '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . h($title) . '｜急難救助系統</title><link rel="stylesheet" href="/assets/site.css"></head><body>';

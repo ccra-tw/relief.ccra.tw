@@ -519,6 +519,19 @@ ok(str_contains($out, '沒有這個功能的權限'), '教會帳號打報表網�
 [, $out] = page('reports/index.php', 'hq@example.test');
 ok(str_contains($out, '急難救助申請主表') && str_contains($out, 'T1-A-2026-0901'), '服管組看得到報表頁');
 
+// 2026-10-19 個資稽核：搜尋條件存伺服器端，網址只帶代碼（姓名不進網址與紀錄）
+$k1 = filter_stash(['name' => '測試甲', 'region' => 1]);
+ok(preg_match('/^[0-9a-f]{12}$/', $k1) === 1 && filter_load($k1) === ['name' => '測試甲', 'region' => 1], '條件存進去、用代碼取回一致');
+ok(filter_load('zzzzzzzzzzzz') === null && filter_load(null) === null && filter_load('../etc') === null, '不存在或格式不對的代碼取不到東西');
+for ($i = 0; $i < FILTER_KEEP + 5; $i++) filter_stash(['n' => $i]);
+ok(count($_SESSION['filters']) === FILTER_KEEP && filter_load($k1) === null, '每個 session 最多留 ' . FILTER_KEEP . ' 組，最舊的自動丟掉');
+[, $out] = page('reports/index.php', 'hq@example.test', ['name' => '測試甲', 'csrf' => 'x']);
+ok(str_contains($out, 'method=post') && !preg_match('/href="[^"]*name=/', $out) && preg_match('/href="\?r=apply&amp;f=[0-9a-f]{12}&amp;csv=1"/', $out) === 1,
+   '報表用 POST 搜尋，匯出連結只帶代碼、不帶姓名');
+ok(str_contains($out, 'value="測試甲"'), '搜尋後畫面仍帶回剛才的條件（需求 0004 的前提）');
+[, $out] = page('admin/audit.php', 'admin@example.test', ['q' => 'login', 'csrf' => 'x']);
+ok(str_contains($out, 'method=post') && str_contains($out, 'value="login"') && !preg_match('/href="[^"]*q=/', $out), '稽核紀錄改 POST 搜尋，搜尋字不進網址');
+
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');

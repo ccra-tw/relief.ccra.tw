@@ -1,9 +1,17 @@
 <?php
-// 報表與匯出（#10）。篩選條件放在網址（GET），所以匯出後按「返回」會帶回原本的搜尋條件（需求 0004）。
+// 報表與匯出（#10）。匯出後按「返回」要帶回原本的搜尋條件（需求 0004）。
+// 2026-10-19 起條件不放網址：搜尋用 POST 存進伺服器端，再轉址到 ?r=種類&f=代碼（見 lib/boot.php filter_stash），
+// 個案姓名因此不會出現在網址、伺服器紀錄與瀏覽器歷史。網址上舊式的 name 參數一律忽略。
 require __DIR__ . '/../../lib/boot.php';
 $u = require_role(MENU['reports'][2]);
 $kind = isset(REPORTS[$_GET['r'] ?? '']) ? $_GET['r'] : 'apply';
-$f = report_filters($_GET);
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    csrf_check();
+    $k = filter_stash(report_filters($_POST));
+    if (PHP_SAPI !== 'cli') { header('Location: ?' . http_build_query(['r' => $kind, 'f' => $k]), true, 303); exit; }
+    $_GET['f'] = $k;   // 測試時沒有轉址，直接用同一組代碼往下跑
+}
+$f = filter_load($_GET['f'] ?? null) ?? report_filters(array_diff_key($_GET, ['name' => 1]));
 if (isset($_GET['csv'])) {
     [$csv, $e] = report_csv($u, $kind, $f);
     if ($e) { http_response_code(400); exit($e); }
@@ -19,7 +27,7 @@ $v = fn($k) => h($f[$k] ?? '');
 page_head('報表與匯出', $u);
 echo '<h1>報表與匯出</h1><p>';
 foreach (REPORTS as $k => $name) echo $k === $kind ? '<b>' . h($name) . '</b>　' : '<a href="?r=' . h($k) . '">' . h($name) . '</a>　';
-echo '</p><form method=get class=filters><input type=hidden name=r value="' . h($kind) . '">';
+echo '</p><form method=post action="?r=' . h($kind) . '" class=filters><input type=hidden name=csrf value="' . h(csrf_token()) . '">';
 echo '<label>大區 <select name=region><option value="">全部</option>';
 foreach ($regions as $r) echo '<option value="' . (int)$r['id'] . '"' . (($f['region'] ?? null) === (int)$r['id'] ? ' selected' : '') . '>' . h($r['name']) . '</option>';
 echo '</select></label> <label>小區 <select name=area><option value="">全部</option>';
@@ -29,7 +37,9 @@ if (in_array($kind, ['apply', 'household'], true)) echo ' <label>個案姓名 <i
 if ($dateLabel) echo " <label>{$dateLabel} <input type=date name=d1 value=\"" . $v('d1') . '"> ～ <input type=date name=d2 value="' . $v('d2') . '"></label>';
 if ($kind !== 'church') echo ' <label>開案日期 <input type=date name=o1 value="' . $v('o1') . '"> ～ <input type=date name=o2 value="' . $v('o2') . '"></label>';
 echo ' <button>搜尋</button></form>';
-$q = http_build_query(['r' => $kind] + $f + ['csv' => 1]);
+// 匯出連結只帶代碼，不帶條件本身；已有有效代碼就沿用，不每次另存一組
+$fk = filter_load($_GET['f'] ?? null) !== null ? $_GET['f'] : ($f ? filter_stash($f) : null);
+$q = http_build_query(['r' => $kind, 'f' => $fk, 'csv' => 1]);
 echo '<p>共 ' . count($rows) . ' 筆　<a href="?' . h($q) . '">匯出 CSV</a>（匯出會記錄在稽核紀錄）</p>';
 echo '<div class=scroll><table><tr>';
 foreach ($head as $c) echo '<th>' . h($c) . '</th>';

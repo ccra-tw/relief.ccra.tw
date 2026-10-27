@@ -30,7 +30,8 @@ if ($a['kind'] === 'change' && ($p = app_row((int)$a['parent_id']))) {
 }
 echo '<h2>審核紀錄</h2><table><tr><th>時間</th><th>關卡</th><th>誰</th><th>動作</th><th>意見</th></tr>';
 $an = ['submit' => '送審', 'approve' => '通過', 'return' => '退件', 'reject' => '不通過'];
-foreach ($steps as $s) echo '<tr><td>' . h(date('m-d H:i', strtotime($s['at']))) . '</td><td>' . h($s['stage'] . ($s['part'] === 'cosign' ? '（會簽）' : '')) . '</td><td>' . h($s['display_name']) . '</td><td>' . h($an[$s['action']]) . '</td><td>' . h($s['opinion']) . '</td></tr>';
+$sn = ['submit' => '教會送審', 'pastor' => '教會牧者', 'region' => '區辦社工', 'other_region' => '他區社工', 'hq' => '服管組'];   // 關卡顯示中文，不露代碼
+foreach ($steps as $s) echo '<tr><td>' . h(date('m-d H:i', strtotime($s['at']))) . '</td><td>' . h(($sn[$s['stage']] ?? $s['stage']) . ($s['part'] === 'cosign' ? '（會簽）' : '')) . '</td><td>' . h($s['display_name']) . '</td><td>' . h($an[$s['action']]) . '</td><td>' . h($s['opinion']) . '</td></tr>';
 echo '</table>';
 $tok = h(csrf_token());
 echo "<form method=post class=card style=max-width:none><input type=hidden name=csrf value=\"$tok\">";

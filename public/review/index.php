@@ -5,6 +5,7 @@ $u = require_role(MENU['review'][2]);
 $q = my_queue($u);
 page_head('待我審核', $u);
 echo '<h1>待我審核</h1>';
+if ($u['role'] === 'region_worker') echo '<p><a class="btn secondary" href="/review/closures.php">提早結案審核 →</a></p>';   // closures.php 原本沒有入口
 if (!$q) echo '<p class="empty">目前沒有等您處理的案件。</p>';
 else {
     echo '<table><tr><th>案號</th><th>個案</th><th>關卡</th><th>送審</th><th></th></tr>';

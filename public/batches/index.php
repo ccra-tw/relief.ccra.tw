@@ -39,7 +39,9 @@ foreach ($batches as $b) {
     if ($mine && !$items) continue;
     $t = batch_totals((int)$b['id']);
     echo '<section class=card style=max-width:none><h2>批次 ' . h("{$b['year']}-{$b['no']}") . '　' . h(['confirming' => '區辦確認中', 'sent' => '已送會計', 'paid' => '已匯款 ' . $b['paid_on']][$b['status']]) . '</h2>';
-    echo '<p>各區小計：' . h(implode('、', array_map(fn($k, $v) => "$k " . number_format($v), array_keys($t['regions']), $t['regions']))) . '｜合計 ' . number_format($t['total']) . ' 元（' . $t['count'] . ' 筆）</p>';
+    // 區辦只看得到自己區的列，小計也只顯示本區，不露出他區金額
+    if ($mine) echo '<p>本區小計：' . number_format(array_sum(array_column($items, 'amount'))) . ' 元（' . count($items) . ' 筆）</p>';
+    else echo '<p>各區小計：' . h(implode('、', array_map(fn($k, $v) => "$k " . number_format($v), array_keys($t['regions']), $t['regions']))) . '｜合計 ' . number_format($t['total']) . ' 元（' . $t['count'] . ' 筆）</p>';
     echo '<table><tr><th>區辦</th><th>案號</th><th>個案</th><th>教會</th><th>期數</th><th>金額</th><th>帳戶</th><th></th></tr>';
     foreach ($items as $it) {
         echo '<tr><td>' . h($it['rcode']) . '</td><td>' . h($it['case_no'] ?? '異動') . '</td><td>' . h($it['name']) . '</td><td>' . h($it['church']) . '</td><td>' . h("{$it['total_seq']}-{$it['seq']}") . '</td><td>' . number_format($it['amount']) . '</td>';

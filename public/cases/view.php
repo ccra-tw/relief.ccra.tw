@@ -9,7 +9,7 @@ $full = !empty($_GET['full']);
 page_head('申請內容', $u);
 echo '<h1>' . h($a['name']) . ' <small>' . h($a['case_no'] ?? '（未送審）') . '</small></h1>';
 if (!empty($_GET['saved'])) echo '<p><b>已儲存。</b></p>';
-if (isset($a['status'])) echo '<p>狀態：' . h($a['status']) . '</p>';
+if (isset($a['status'])) echo '<p>狀態：<span class="badge s-' . h($a['status']) . '">' . h(STATUS_NAMES[$a['status']] ?? $a['status']) . '</span></p>';
 echo '<p>身分證：<b>' . h(app_idno_display($u, $a, $full)) . '</b>';
 if (!$full && in_array($u['role'], PII_FULL_ROLES, true)) echo ' <a href="?id=' . (int)$a['id'] . '&full=1">顯示完整號碼（會留紀錄）</a>';
 echo '</p>';

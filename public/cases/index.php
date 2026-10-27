@@ -11,10 +11,15 @@ $church = in_array($u['role'], APPLY_ROLES, true);
 page_head('個案與申請', $u);
 echo '<h1>個案與申請</h1>';
 if ($church) echo '<p><a class=btn href="/cases/new.php">＋ 新的急難救助申請</a></p>';
+$rows = $s->fetchAll();
+if (!$rows) {
+    echo '<p class="empty">目前還沒有個案。' . ($church ? '按上方「＋ 新的急難救助申請」開始第一筆。' : '') . '</p>';
+    page_foot(); exit;
+}
 echo '<table><tr><th>案號</th><th>個案</th><th>身分證</th><th>教會</th>' . ($church ? '<th>送出</th>' : '<th>狀態</th>') . '<th></th></tr>';
-foreach ($s as $r) {
+foreach ($rows as $r) {
     echo '<tr><td>' . h($r['case_no'] ?? '（未送審）') . '</td><td>' . h($r['name']) . '</td><td>' . h(pii_mask($r['idno_head'], $r['idno_last4'])) . '</td><td>' . h($r['church']) . '</td>';
-    echo '<td>' . ($church ? h($r['submitted_at'] ? date('Y-m-d', strtotime($r['submitted_at'])) : '草稿') : h($r['status'])) . '</td>';
+    echo '<td>' . ($church ? h($r['submitted_at'] ? date('Y-m-d', strtotime($r['submitted_at'])) : '草稿') : '<span class="badge s-' . h($r['status']) . '">' . h(STATUS_NAMES[$r['status']] ?? $r['status']) . '</span>') . '</td>';
     echo '<td><a href="/cases/view.php?id=' . (int)$r['id'] . '">開啟</a></td></tr>';
 }
 echo '</table>';

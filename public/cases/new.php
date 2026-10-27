@@ -49,7 +49,7 @@ if (!$id && empty($_SESSION['intake_idno']) && PHP_SAPI !== 'cli') {
 if (!$id) echo '<p>個案身分證：<b>' . h(pii_mask(($_SESSION['intake_idno'] ?? 'X')[0], substr($_SESSION['intake_idno'] ?? '0000', -4))) . '</b></p>';
 if (isset($err['idno'])) echo '<p class=err>' . h($err['idno']) . '</p>';
 echo "<form method=post enctype=multipart/form-data><input type=hidden name=csrf value=\"$tok\">";
-echo '<fieldset><legend>申請人</legend><label>申請人連絡電話 <span class=req>*</span><input name=applicant_phone value="' . h($phone) . '"></label>' . (isset($err['applicant_phone']) ? '<div class=err>' . h($err['applicant_phone']) . '</div>' : '') . '</fieldset>';
+echo '<fieldset><legend>申請人</legend><label><span>申請人連絡電話 <span class=req>*</span></span><input name=applicant_phone value="' . h($phone) . '"></label>' . (isset($err['applicant_phone']) ? '<div class=err>' . h($err['applicant_phone']) . '</div>' : '') . '</fieldset>';
 echo fr_form($data, $err);
 echo fr_household($hh, $err);
 echo '<fieldset><legend>檢附資料（PDF、JPG、PNG、Word；每檔 10MB 內）</legend>';

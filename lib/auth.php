@@ -108,6 +108,14 @@ function password_login(string $username, string $password): ?string {
     return null;
 }
 
+// 只看本瀏覽器 session 已登入的人，不用 Cloudflare Access 身分自動登入。
+// 登入頁用這支：協會同工登出後要能改用教會帳號登入（走查時同一人要切換身分；繁英姊 10-27 回報進不去教會登入頁）。
+function session_user_or_null(): ?array {
+    if (test_seam()) return current_user_or_null();
+    session_boot();
+    return !empty($_SESSION['uid']) ? load_user('id', (string)$_SESSION['uid']) : null;
+}
+
 function logout(): void {
     $u = current_user_or_null();
     if ($u) audit('logout', 'user', $u['id']);

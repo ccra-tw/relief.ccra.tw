@@ -25,7 +25,14 @@ nav a.on{background:var(--brand);color:#fff}
 a.out{color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:4px 10px}
 a.out:hover{border-color:var(--brand);color:var(--brand)}
 
-main{width:100%;max-width:1040px;margin:0 auto;padding:24px 20px 40px;flex:1;overflow-x:auto;min-width:0}
+/* 寬螢幕（熊哥 10-27：「寬螢幕看的會很不舒服」）：頁首與內容對齊同一個置中欄位，欄寬放到 1240 */
+main{width:100%;max-width:1240px;margin:0 auto;padding:24px 20px 40px;flex:1;overflow-x:auto;min-width:0}
+@media (min-width:1280px){header.top{padding-left:calc((100vw - 1240px)/2 + 20px);padding-right:calc((100vw - 1240px)/2 + 20px)}}
+/* 一列式表單（管理頁的區辦／區域編輯）：欄位排成一行，不要每格各佔一行 */
+form.row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+form.row label{flex:0 1 auto}form.row input:not([type=checkbox]){width:auto;min-width:90px}
+label:has(> input[type=checkbox]),label:has(> input[type=radio]){align-items:flex-start}
+label:has(> input[type=checkbox]) input{margin:10px 0}
 .note{color:var(--muted)}.err{color:var(--err);font-weight:700}
 
 /* 頁尾：版本與版權 */

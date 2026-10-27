@@ -11,8 +11,9 @@ h2{font-size:20px;margin:22px 0 10px}
 
 /* 頁首：標誌＋協會名、目前頁面標示 */
 header.top{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:10px 20px;background:var(--card);border-bottom:3px solid var(--brand-2);position:sticky;top:0;z-index:5}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink)}
-.brand img{width:40px;height:40px}
+.brand{display:flex;flex:none;align-items:center;gap:10px;text-decoration:none;color:var(--ink)}
+/* 標誌照協會官網呈現成圓形徽章（白底圓＋細框），flex:none 避免頁首擠壓（熊哥 10-27「Logo 變形」「Logo是圓的」「參考官網」） */
+.brand img{flex:none;width:46px;height:46px;object-fit:contain;border-radius:50%;background:#fff;padding:2px;box-shadow:0 0 0 1px var(--line),0 1px 3px rgba(0,0,0,.12)}
 .brand span{display:flex;flex-direction:column;line-height:1.2}.brand b{font-size:18px}
 .brand small{font-size:12px;color:var(--muted);letter-spacing:.05em}
 .tag{font-size:12px;font-weight:700;color:var(--warn);background:var(--brand-soft);border:1px solid var(--brand-2);border-radius:99px;padding:1px 10px}

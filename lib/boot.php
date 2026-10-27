@@ -54,7 +54,7 @@ function page_head(string $title, ?array $u = null): void {
     echo '<title>' . h($title) . '｜急難救助系統｜中華基督教救助協會</title><link rel="icon" href="/assets/ccra-logo.png">';
     echo '<link rel="stylesheet" href="/assets/site.css?v=' . RELIEF_VERSION . '"></head><body>';
     // 協會 CI：標誌＋協會全名，標準色見 site.css 的 --brand（取自協會官網）
-    echo '<header class="top"><a class="brand" href="/"><img src="/assets/ccra-logo.png" alt="中華基督教救助協會標誌" width="40" height="40">'
+    echo '<header class="top"><a class="brand" href="/"><img src="/assets/ccra-logo.png" alt="中華基督教救助協會標誌" width="46" height="46">'
        . '<span><b>急難救助系統</b><small>中華基督教救助協會</small></span></a><span class="tag">實驗版</span>';
     if ($u) {
         $here = $_SERVER['SCRIPT_NAME'] ?? '/';

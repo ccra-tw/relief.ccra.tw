@@ -9,6 +9,16 @@ $full = !empty($_GET['full']);
 page_head('申請內容', $u);
 echo '<h1>' . h($a['name']) . ' <small>' . h($a['case_no'] ?? '（未送審）') . '</small></h1>';
 if (!empty($_GET['saved'])) echo '<p><b>已儲存。</b></p>';
+// 退件原因給教會端看（熊哥 2026-10-27 TG 選「退件原因顯示在教會端」：教會帳號沒有 Email，收不到退件通知）。
+// 其餘審核狀態仍不給教會端看（需求 0002）。
+if (in_array($u['role'], APPLY_ROLES, true) && (app_row((int)$a['id'])['status'] ?? '') === 'returned') {
+    $rs = rdb()->prepare("SELECT stage, opinion, at FROM review_step WHERE application_id = ? AND action = 'return' ORDER BY id DESC LIMIT 1");
+    $rs->execute([(int)$a['id']]); $rt = $rs->fetch();
+    $who = ['pastor' => '教會牧者', 'region' => '區辦社工', 'other_region' => '他區社工', 'hq' => '服管組'];
+    echo '<div class="notice"><b>這份申請被退回，請依下列原因修改後，按最下方「修改完成，再次送審」。</b>';
+    if ($rt) echo '<br>退件原因：' . nl2br(h($rt['opinion'])) . '<br><small>' . h(($who[$rt['stage']] ?? '') . '　' . date('Y-m-d', strtotime($rt['at']))) . '</small>';
+    echo '</div>';
+}
 if (isset($a['status'])) echo '<p>狀態：<span class="badge s-' . h($a['status']) . '">' . h(STATUS_NAMES[$a['status']] ?? $a['status']) . '</span></p>';
 echo '<p>身分證：<b>' . h(app_idno_display($u, $a, $full)) . '</b>';
 if (!$full && in_array($u['role'], PII_FULL_ROLES, true)) echo ' <a href="?id=' . (int)$a['id'] . '&full=1">顯示完整號碼（會留紀錄）</a>';

@@ -19,7 +19,7 @@ if (!$rows) {
 echo '<table><tr><th>案號</th><th>個案</th><th>身分證</th><th>教會</th>' . ($church ? '<th>送出</th>' : '<th>狀態</th>') . '<th></th></tr>';
 foreach ($rows as $r) {
     echo '<tr><td>' . h($r['case_no'] ?? '（未送審）') . '</td><td>' . h($r['name']) . '</td><td>' . h(pii_mask($r['idno_head'], $r['idno_last4'])) . '</td><td>' . h($r['church']) . '</td>';
-    echo '<td>' . ($church ? h($r['submitted_at'] ? date('Y-m-d', strtotime($r['submitted_at'])) : '草稿') : '<span class="badge s-' . h($r['status']) . '">' . h(STATUS_NAMES[$r['status']] ?? $r['status']) . '</span>') . '</td>';
+    echo '<td>' . ($church ? ($r['status'] === 'returned' ? '<span class="badge s-returned">退件，請修改</span>' : h($r['submitted_at'] ? date('Y-m-d', strtotime($r['submitted_at'])) : '草稿')) : '<span class="badge s-' . h($r['status']) . '">' . h(STATUS_NAMES[$r['status']] ?? $r['status']) . '</span>') . '</td>';
     echo '<td><a href="/cases/view.php?id=' . (int)$r['id'] . '">開啟</a></td></tr>';
 }
 echo '</table>';

@@ -38,6 +38,8 @@ label:has(> input[type=checkbox]) input{margin:10px 0}
 /* 頁尾：版本與版權 */
 footer.foot{border-top:1px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;text-align:center;padding:14px 20px}
 footer.foot p{margin:2px 0;overflow-wrap:anywhere}
+.notice{background:#fff7e0;border:1px solid #f2ae00;border-left:5px solid #f2ae00;border-radius:10px;padding:12px 16px;margin:12px 0}
+@media (prefers-color-scheme:dark){.notice{background:#3a2f12}}
 .empty{background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
 
 /* 卡片、表單 */

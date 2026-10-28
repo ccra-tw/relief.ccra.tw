@@ -37,7 +37,8 @@ function church_add_request(array $u, array $f): ?string {
     // 名錄的 add_data 會建一個待審核的名錄資料；「管理密碼」由名錄要求，這裡隨機產生，不給教會也不存明文
     $resp = dir_add(['ocname' => $f['name'], 'passwd' => bin2hex(random_bytes(8)), 'code' => 'TW', 'tel' => $f['tel'],
                      'email1' => $f['email'] ?? '', 'zipcode' => $f['zipcode'] ?? '', 'city' => $f['city'], 'area' => $f['town'] ?? '',
-                     'address' => $f['address'] . '（急難救助系統代送）']);
+                     // 小秘 10/07：申請內容開頭帶「【急難救助系統申請】」，她在名錄後台審核時依此辨識來源（名錄記不到金鑰）
+                     'address' => '【急難救助系統申請】' . $f['address']]);
     $s = rdb()->prepare('INSERT INTO church_add_request (name, tel, email, zipcode, city, town, address, area_id, api_response, requested_by) VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id');
     $s->execute([$f['name'], $f['tel'], $f['email'] ?? null, $f['zipcode'] ?? null, $f['city'], $f['town'] ?? null, $f['address'], $areaId, json_encode($resp, JSON_UNESCAPED_UNICODE), $u['id']]);
     audit('create', 'church_add_request', $s->fetchColumn(), ['name' => $f['name']]);

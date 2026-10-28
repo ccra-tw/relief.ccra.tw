@@ -79,7 +79,8 @@ function app_save(array $u, array $in, ?int $id = null): array {
     }
     $a = app_load($u, $id);
     if (!$a) return [null, ['_' => '找不到這份申請。']];
-    if (!in_array($a['status'], ['draft', 'returned'], true)) return [null, ['_' => '已送審的申請不能在這裡修改。']];
+    // 狀態要讀原始資料列：app_load 對教會端會拿掉 status（需求 0002），拿它判斷會讓教會永遠改不了草稿與退件
+    if (!in_array(app_row($id)['status'] ?? '', ['draft', 'returned'], true)) return [null, ['_' => '已送審的申請不能在這裡修改。']];
     if ($err) return [$id, $err];
     // 修改時身分證欄留空＝沿用原值（畫面上只顯示遮罩，不會把舊號碼送回瀏覽器）；以同一列、同姓名對應
     foreach ($hh as $i => &$row) {

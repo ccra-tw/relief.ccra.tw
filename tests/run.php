@@ -462,6 +462,8 @@ $cn = app_row($n1)['case_no'];
 $m = $last(); review_act($PA, $n1, 'return', '資料再確認');
 ok(app_row($n1)['status'] === 'returned' && count($since($m, 'church_result')) > 0, '牧者退件 → 退回教會修改並通知教會');
 ok(app_load($CS, $n1) !== null && !array_key_exists('status', app_load($CS, $n1)), '教會看得到被退的案子但看不到狀態欄');
+[$x, $e] = app_save($CS, ['amount_requested' => '10000', 'applicant_phone' => '02-9'] + $good, $n1);
+ok($e === [] && (int)app_row($n1)['amount_requested'] === 10000 && app_row($n1)['status'] === 'returned', '教會編輯被退件的申請（改金額）能存，狀態仍是退件');
 ok(app_submit($CS, $n1) === null && app_row($n1)['case_no'] === $cn && app_row($n1)['status'] === 'pastor_review', '教會修改後再送審，案號沿用、從牧者關重新開始');
 ok(return_recipients($a1, 'region_review') === rcpt_region($a1) && return_recipients($a1, 'returned') === [], '退回區辦寄區辦社工；退回教會不走同工通知');
 $m = $last(); approve_all($n1, $CS);

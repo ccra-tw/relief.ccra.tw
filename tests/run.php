@@ -194,7 +194,11 @@ $hhRow = json_decode($db->query("SELECT household FROM application WHERE id=$aid
 ok(count($hhRow) === 1 && pii_decrypt($hhRow[0]['idno_enc']) === $ID2, '家屬身分證號是密文、可用金鑰解回');
 [$x, $e] = app_save($CS, $good + ['idno' => 'A123456780', 'applicant_phone' => '1']);
 ok(isset($e['idno']), '檢查碼錯的身分證號擋下');
-$WK = load_user('email', 'worker@example.test');   // 區辦社工（區辦 1，與 900001 同區）
+$cnt = (int)$db->query("SELECT count(*) FROM application")->fetchColumn();
+[$c, $o] = page('cases/new.php', 'grace-staff', ['idno' => fake_id('F13030303'), 'applicant_phone' => '1', 'name' => '測試甲']);
+ok(str_contains($o, '尚未儲存') && str_contains($o, '生日必填') && (int)$db->query("SELECT count(*) FROM application")->fetchColumn() === $cnt,
+   '缺欄位送出：頁首寫明「尚未儲存」並列出缺漏，且沒有寫入');
+$WK =load_user('email', 'worker@example.test');   // 區辦社工（區辦 1，與 900001 同區）
 ok(!array_key_exists('status', app_load($CS, $aid)) && array_key_exists('status', app_load($WK, $aid)), '教會端看不到審核狀態，區辦看得到（需求 0002）');
 $CSa = app_load($CS, $aid);
 ok(app_idno_display($CS, $CSa, true) === pii_mask($ID1[0], substr($ID1, -4)), '教會端即使要求也只看到遮罩號碼');

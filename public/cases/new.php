@@ -38,6 +38,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 page_head($id ? '編輯申請' : '新的急難救助申請', $u);
 echo '<h1>' . ($id ? '編輯申請（草稿）' : '新的急難救助申請') . '</h1>';
 if (isset($err['_'])) echo '<p class=err>' . h($err['_']) . '</p>';
+// 表單送出但沒存成功時，頁首要講清楚；否則錯誤只散在各欄位旁，使用者會以為已經存了
+$fieldErr = array_diff_key($err, ['_' => 1, 'idno' => 1]);
+if ($fieldErr && ($_POST['step'] ?? '') !== 'idno') {
+    echo '<div class="card err-summary" role=alert><p class=err>尚未儲存：有 ' . count($fieldErr) . ' 個欄位要補填或修正（下方紅字處）。</p><ul>';
+    foreach (array_slice($fieldErr, 0, 15) as $m) echo '<li>' . h($m) . '</li>';
+    if (count($fieldErr) > 15) echo '<li>…另有 ' . (count($fieldErr) - 15) . ' 項</li>';
+    echo '</ul></div>';
+}
 $tok = h(csrf_token());
 if (!$id && empty($_SESSION['intake_idno']) && PHP_SAPI !== 'cli') {
     echo "<form method=post class=card><input type=hidden name=csrf value=\"$tok\"><input type=hidden name=step value=idno>";

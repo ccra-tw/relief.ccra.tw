@@ -11,6 +11,8 @@ $u = require_role(POC_ROLES);
 page_head('錄影簽名（雛形）', $u);
 ?>
 <style>
+label.chk{display:flex;align-items:flex-start;gap:10px;font-weight:700;cursor:pointer}
+label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;flex:none;accent-color:var(--brand)}
 #stage{display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column}
 #stage.on{display:flex}
 #stage .cam{position:relative;flex:0 0 38%;overflow:hidden}
@@ -53,7 +55,7 @@ page_head('錄影簽名（雛形）', $u);
   <details open><summary>蒐集錄影的告知事項（請唸給或給簽收人看）</summary>
     <p class="note">中華基督教救助協會為確認物資已交付本人，於本次簽收時錄製您的影像、聲音與簽名過程。用途僅限物資簽收佐證與內部查核；只有經手同工與督導主管可調閱；保存 <?= POC_KEEP_DAYS ?> 天（雛形測試期）後刪除。您可以拒絕錄影，改以紙本簽收，不影響您領取物資；也可以事後要求刪除。</p>
   </details>
-  <p><label><input type="checkbox" name="consent" value="1" id="consent"> 簽收人已了解上述告知事項，並同意本次錄影。</label></p>
+  <p><label class="chk"><input type="checkbox" name="consent" value="1" id="consent"><span>簽收人已了解上述告知事項，並同意本次錄影。</span></label></p>
   <p>錄影時請簽收人唸：<b id="stmt">我是＿＿＿，今天收到中華基督教救助協會提供的物資，數量正確。</b></p>
   <p><button type="button" id="rec" class="primary">開始錄影並簽名</button> <span id="rs" class="note">勾選同意後按這裡，會開啟鏡頭並進入全螢幕簽名</span></p>
   <p id="camerr" class="note" style="color:#c62828;display:none"></p>

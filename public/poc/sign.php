@@ -23,7 +23,8 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
 #stage .cam .clock{position:absolute;top:8px;right:10px;color:#fff;font:600 15px/1.2 ui-monospace,monospace;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
 #stage .cam .face{position:absolute;top:36px;left:10px;font-weight:700;font-size:14px;padding:2px 8px;border-radius:8px;color:#fff;background:rgba(0,0,0,.45)}
 #stage .cam .face.yes{background:rgba(10,125,59,.8)}#stage .cam .face.no{background:rgba(198,40,40,.85)}
-#stage .cam .hint{top:68px}
+#stage .cam .hint{top:68px;font-size:22px;font-weight:700;line-height:1.45;background:rgba(0,0,0,.55);padding:8px 10px;border-radius:10px}   /* 熊哥 10-29：聲明字太小，老花看不清楚 */
+#stmt{font-size:20px;line-height:1.5}
 #stage .cam .rec{position:absolute;top:10px;left:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
 #stage .cam canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 #stage .cam .ph{position:absolute;left:0;right:0;bottom:44px;text-align:center;color:#fff;font-size:15px;text-shadow:0 1px 3px #000;pointer-events:none}

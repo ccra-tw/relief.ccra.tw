@@ -9,5 +9,6 @@ csrf_check();
 $sig = ($_FILES['signature']['error'] ?? 1) === UPLOAD_ERR_OK ? (string)file_get_contents($_FILES['signature']['tmp_name']) : '';
 $vid = ($_FILES['video']['error'] ?? 1) === UPLOAD_ERR_OK ? $_FILES['video']['tmp_name'] : '';
 if (($_FILES['video']['error'] ?? 0) === UPLOAD_ERR_INI_SIZE) exit(json_encode(['error' => '錄影檔太大（上限 10 MB），請錄短一點。']));
-[$id, $err] = poc_save($_POST, $sig, $vid, $u);
+$snap = ($_FILES['snapshot']['error'] ?? 1) === UPLOAD_ERR_OK ? (string)file_get_contents($_FILES['snapshot']['tmp_name']) : '';
+[$id, $err] = poc_save($_POST, $sig, $vid, $u, $snap);
 echo json_encode($id ? ['id' => $id] : ['error' => $err], JSON_UNESCAPED_UNICODE);

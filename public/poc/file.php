@@ -5,11 +5,11 @@ require __DIR__ . '/../../lib/poc_sign.php';
 require_role(POC_ROLES);
 $m = poc_load((string)($_GET['id'] ?? ''));
 $k = $_GET['k'] ?? '';
-if (!$m || !in_array($k, ['sig', 'video'], true)) { http_response_code(404); exit('找不到'); }
+if (!$m || !in_array($k, ['sig', 'snap', 'video'], true)) { http_response_code(404); exit('找不到'); }
 $data = poc_read($m, $k);
 if ($data === null) { http_response_code(500); exit('檔案無法讀取或解密失敗'); }
 $size = strlen($data); $start = 0; $end = $size - 1;
-header('Content-Type: ' . ($k === 'sig' ? 'image/png' : $m['video_mime']));
+header('Content-Type: ' . match ($k) { 'sig' => 'image/png', 'snap' => 'image/jpeg', default => $m['video_mime'] });
 header('Accept-Ranges: bytes');
 header('Cache-Control: private, no-store');
 if (preg_match('/bytes=(\d*)-(\d*)/', $_SERVER['HTTP_RANGE'] ?? '', $r)) {

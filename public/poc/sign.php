@@ -193,7 +193,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     if (!(await openCam())) { $('rec').disabled = false; return; }
     // 合成畫布的長寬比跟手機上的鏡頭區一致，簽名在影片裡的位置才不會被拉長
     { const r = document.querySelector('#stage .cam').getBoundingClientRect(); H = Math.round(W * (r.height / r.width || 800 / 480) / 2) * 2; out.width = W; out.height = H; }
-    chunks = []; blob = null; sec = 0; inked = false; autoStopped = false; stamped = ''; stampDone = false; $('sec').textContent = '0';
+    chunks = []; blob = null; snapP = null; sec = 0; inked = false; autoStopped = false; stamped = ''; stampDone = false; $('sec').textContent = '0';
     sx.clearRect(0, 0, sig.width, sig.height);
     const type = pick();
     const opts = Object.assign({ videoBitsPerSecond: 900000, audioBitsPerSecond: 64000 }, type ? { mimeType: type } : {});
@@ -223,20 +223,44 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
   $('go').onclick = () => {
     if (rec && rec.state !== 'recording' && blob && inked) { $('go').disabled = true; upload(); return; }   // 上傳失敗後重送同一段錄影
     if (!rec || rec.state !== 'recording') return;
-    if (!inked) { say('還沒簽名，請在白色區域簽名後再送出'); return; }
-    $('go').disabled = true; rec.stop();
+    if (!inked) { say('還沒簽名，請直接在畫面上簽名後再送出'); return; }
+    $('go').disabled = true;
+    stampSig();
+    snapshot();   // 鏡頭還開著的最後一刻拍下完成截圖，再停止錄影（簽署時間也會錄進最後幾格）
+    setTimeout(() => rec.stop(), 300);
   };
+
+  // 簽署時間蓋在簽名圖右下角（按送出那一刻）；重送時沿用第一次的時間，不重複蓋
+  function stampSig() {
+    const d = window.devicePixelRatio || 1;
+    if (!stamped) stamped = '簽署時間 ' + ts();
+    if (!stampDone) { stampDone = true; sx.save(); sx.font = (14 * d) + 'px monospace'; sx.fillStyle = '#fff'; sx.textAlign = 'right'; sx.fillText(stamped, sig.width - 10 * d, sig.height - 10 * d); sx.restore(); }
+  }
+  // 完成截圖：送出那一刻的鏡頭畫面＋簽名＋時間，跟手機上看到的一樣（熊哥 10-29「簽名可以直接壓在影片上和最後完成的截圖」）
+  let snapP = null;
+  function snapshot() {
+    snapP = null;
+    try {
+      const c = document.createElement('canvas'); c.width = sig.width; c.height = sig.height;
+      const g = c.getContext('2d'), vw = live.videoWidth || 640, vh = live.videoHeight || 480, s = Math.max(c.width / vw, c.height / vh), d = window.devicePixelRatio || 1;
+      g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+      if (vw && live.readyState >= 2) { g.save(); g.translate(c.width, 0); g.scale(-1, 1); g.drawImage(live, (c.width - vw * s) / 2, (c.height - vh * s) / 2, vw * s, vh * s); g.restore(); }
+      g.drawImage(sig, 0, 0);
+      g.font = '600 ' + (16 * d) + 'px monospace'; const t = ts(), tw = g.measureText(t).width;
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(c.width - tw - 22 * d, 8 * d, tw + 14 * d, 28 * d); g.fillStyle = '#fff'; g.fillText(t, c.width - tw - 15 * d, 28 * d);
+      snapP = new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+    } catch (_) { snapP = null; }   // 截圖失敗不擋送出：錄影與簽名仍會存
+  }
 
   async function upload() {
     if (autoStopped) { autoStopped = false; shut(); $('rec').disabled = false; $('rs').textContent = '已達 ' + MAX + ' 秒上限，錄影停止；請再按一次重新錄'; return; }
     $('stmtv').value = $('stmt').textContent;
     const fd = new FormData($('f'));
     // 簽署時間蓋在簽名圖右下角（送出那一刻）；伺服器另記收到時間，兩者都在收執頁
-    const d = window.devicePixelRatio || 1;
-    if (!stamped) stamped = '簽署時間 ' + ts();   // 重送時沿用第一次的時間，不重複蓋
-    const st = stamped;
-    if (!stampDone) { stampDone = true; sx.save(); sx.font = (14 * d) + 'px monospace'; sx.fillStyle = '#fff'; sx.textAlign = 'right'; sx.fillText(st, sig.width - 10 * d, sig.height - 10 * d); sx.restore(); }
-    fd.append('signed_at_client', st.replace('簽署時間 ', ''));
+    stampSig();
+    fd.append('signed_at_client', stamped.replace('簽署時間 ', ''));
+    const snap = snapP ? await Promise.race([snapP, new Promise(r => setTimeout(() => r(null), 3000))]) : null;
+    if (snap) fd.append('snapshot', snap, 'snapshot.jpg');
     fd.append('signature', await new Promise(r => sig.toBlob(r, 'image/png')), 'signature.png');
     fd.append('video', blob, 'video.' + (blob.type.includes('mp4') ? 'mp4' : 'webm'));
     fd.append('composite', composite ? '1' : '0');

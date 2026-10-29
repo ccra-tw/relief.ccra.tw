@@ -591,6 +591,12 @@ $old = json_decode(file_get_contents(poc_dir() . "/$id/meta.json"), true);
 $old['created_at'] = date('c', time() - (POC_KEEP_DAYS + 1) * 86400);
 file_put_contents(poc_dir() . "/$id/meta.json", json_encode($old, JSON_UNESCAPED_UNICODE));
 ok(poc_purge_expired() === 1 && !is_dir(poc_dir() . "/$id"), '超過保存期限的雛形紀錄會被刪除（告知的保存期限要真的做到）');
+$jpg = "ÿØÿà" . str_repeat('j', 500);
+[$sid, $serr] = poc_save(['recipient' => '測試乙', 'items' => '罐頭 6 罐', 'consent' => '1'], $png, $mp4, $pu, $jpg);
+$sm = $sid ? poc_load($sid) : null;
+ok($sm && poc_read($sm, 'snap') === $jpg && poc_verify($sm)['snapshot'] === true && is_file(poc_dir() . "/$sid/snapshot.jpg.enc"), '完成截圖加密存檔，解密後逐位元相同、雜湊吻合');
+ok(($pm['snapshot_sha256'] ?? null) === null && poc_verify($pm)['snapshot'] === null, '沒有完成截圖的紀錄（舊裝置）不算錯，驗證欄位為 null');
+ok(poc_save(['recipient' => '測試乙', 'items' => '罐頭', 'consent' => '1'], $png, $mp4, $pu, 'not-a-jpeg')[0] === null, '完成截圖不是 JPEG 就退件');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

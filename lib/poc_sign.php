@@ -12,6 +12,7 @@
 const POC_ROLES = ['region_worker', 'region_head', 'hq_worker', 'hq_head', 'admin'];
 const POC_VIDEO_MAX = 10 * 1024 * 1024;   // 與 php-fpm upload_max_filesize 一致；前端以約 0.9 Mbps 錄 45 秒約 5 MB
 const POC_SIG_MAX = 600 * 1024;
+const POC_SNAP_MAX = 2 * 1024 * 1024;   // 完成截圖（JPEG）：送出那一刻的鏡頭畫面＋簽名＋時間（熊哥 10-29「簽名壓在影片上和最後完成的截圖」）
 const POC_VIDEO_TYPES = ['video/mp4' => 'mp4', 'video/webm' => 'webm', 'video/quicktime' => 'mov'];
 const POC_KEEP_DAYS = 30;   // 個資法：告知的保存期限要真的做到；poc_list() 每次執行時清掉過期的資料夾
 const POC_DIGEST_TO = 'ituncle@ccra.org.tw';   // 存證碼清單寄送的外部信箱（資訊部，與主機分屬不同系統）
@@ -45,7 +46,7 @@ function poc_dec(string $blob): ?string {
 // 讀回原始內容：新資料是加密檔（*.enc），v0.3.0～0.3.4 試用期間的少數舊資料是明碼，兩種都讀得到
 function poc_read(array $m, string $k): ?string {
     $dir = poc_dir() . '/' . $m['id'];
-    $name = $k === 'sig' ? 'signature.png' : $m['video_file'];
+    $name = match ($k) { 'sig' => 'signature.png', 'snap' => 'snapshot.jpg', default => $m['video_file'] };
     if (is_file("$dir/$name.enc")) return poc_dec((string)file_get_contents("$dir/$name.enc"));
     return is_file("$dir/$name") ? (string)file_get_contents("$dir/$name") : null;
 }
@@ -56,7 +57,7 @@ function poc_client_ip(): string {
 }
 
 // 回傳 [id, null] 或 [null, 錯誤訊息]。$videoTmp 是上傳暫存檔路徑。
-function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
+function poc_save(array $f, string $sigPng, string $videoTmp, array $u, string $snapJpg = ''): array {
     $who = trim((string)($f['recipient'] ?? ''));
     $items = trim((string)($f['items'] ?? ''));
     if ($who === '' || mb_strlen($who) > 40) return [null, '請填寫簽收人代稱（40 字以內，雛形請勿填真實姓名）。'];
@@ -65,6 +66,7 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
     if (strlen($sigPng) < 100 || strlen($sigPng) > POC_SIG_MAX || substr($sigPng, 0, 8) !== "\x89PNG\r\n\x1a\n") return [null, '沒有收到簽名，請在簽名框簽名後再送出。'];
     if (!is_file($videoTmp) || filesize($videoTmp) < 1000) return [null, '沒有收到錄影，請先錄一段聲明。'];
     if (filesize($videoTmp) > POC_VIDEO_MAX) return [null, '錄影檔太大（上限 10 MB），請錄短一點。'];
+    if ($snapJpg !== '' && (strlen($snapJpg) > POC_SNAP_MAX || substr($snapJpg, 0, 3) !== "ÿØÿ")) return [null, '完成截圖格式不對或太大，請再送一次。'];
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($videoTmp);
     if (!isset(POC_VIDEO_TYPES[$mime])) return [null, '錄影格式不支援（' . $mime . '）。'];
     $video = (string)file_get_contents($videoTmp);
@@ -75,6 +77,7 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
     if (!mkdir($dir, 0770)) return [null, '存檔失敗（目錄）。'];
     $vname = 'video.' . POC_VIDEO_TYPES[$mime];
     if (file_put_contents("$dir/$vname.enc", poc_enc($video)) === false || file_put_contents("$dir/signature.png.enc", poc_enc($sigPng)) === false) return [null, '存檔失敗。'];
+    if ($snapJpg !== '' && file_put_contents("$dir/snapshot.jpg.enc", poc_enc($snapJpg)) === false) return [null, '存檔失敗。'];
     if (PHP_SAPI !== 'cli') @unlink($videoTmp);
 
     $meta = [
@@ -89,6 +92,7 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
         'consent' => true,
         'composite' => ($f['composite'] ?? '') === '1',   // 簽名是否合成進錄影畫面（熊哥 10-29：簽名直接壓在錄影上）
         'signature_sha256' => hash('sha256', $sigPng),
+        'snapshot_sha256' => $snapJpg !== '' ? hash('sha256', $snapJpg) : null,
         'video_file' => $vname,
         'video_mime' => $mime,
         'video_bytes' => strlen($video),
@@ -118,6 +122,7 @@ function poc_verify(array $m): array {
     return [
         'signature' => $sig !== null && hash('sha256', $sig) === $m['signature_sha256'],
         'video' => $vid !== null && hash('sha256', $vid) === $m['video_sha256'],
+        'snapshot' => empty($m['snapshot_sha256']) ? null : (($s = poc_read($m, 'snap')) !== null && hash('sha256', $s) === $m['snapshot_sha256']),
         'seal' => poc_seal($m) === ($m['seal'] ?? ''),
     ];
 }

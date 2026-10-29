@@ -21,7 +21,7 @@ echo '<tr><th>簽名合成進錄影</th><td>' . (!empty($m['composite']) ? '是�
 echo '<tr><th>錄影同意</th><td>' . ($m['consent'] ? '已勾選同意' : '—') . '</td></tr>';
 echo '</table>';
 echo '<h2>錄影（聲明＋簽名過程）</h2><video src="/poc/file.php?id=' . h($m['id']) . '&amp;k=video" controls playsinline style="width:100%;max-width:420px;border-radius:12px"></video>';
-echo '<h2>手寫簽名</h2><img src="/poc/file.php?id=' . h($m['id']) . '&amp;k=sig" alt="簽名" style="width:100%;max-width:600px;border:1px solid #ddd;border-radius:12px;background:#fff">';
+echo '<h2>手寫簽名（白色筆跡，原本疊在影片上）</h2><img src="/poc/file.php?id=' . h($m['id']) . '&amp;k=sig" alt="簽名" style="width:100%;max-width:600px;border:1px solid #ddd;border-radius:12px;background:#3a3a3a">';
 echo '<h2>存證</h2><table class="kv">';
 echo '<tr><th>存證碼</th><td><code>' . h($m['seal']) . '</code><br>' . $ok($v['seal']) . '</td></tr>';
 echo '<tr><th>簽名 SHA-256</th><td><code>' . h($m['signature_sha256']) . '</code><br>' . $ok($v['signature']) . '</td></tr>';

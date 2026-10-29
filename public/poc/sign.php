@@ -15,14 +15,13 @@ label.chk{display:flex;align-items:flex-start;gap:10px;font-weight:700;cursor:po
 label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;flex:none;accent-color:var(--brand)}
 #stage{display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column}
 #stage.on{display:flex}
-#stage .cam{position:relative;flex:0 0 38%;overflow:hidden}
+#stage .cam{position:relative;flex:1 1 auto;overflow:hidden}
 #stage .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-#stage .cam .hint{position:absolute;left:10px;right:10px;bottom:8px;color:#fff;font-size:14px;line-height:1.4;text-shadow:0 1px 3px #000}
+#stage .cam .hint{position:absolute;left:10px;right:10px;top:44px;color:#fff;font-size:14px;line-height:1.4;text-shadow:0 1px 3px #000}
 #stage .cam .clock{position:absolute;top:8px;right:10px;color:#fff;font:600 15px/1.2 ui-monospace,monospace;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
 #stage .cam .rec{position:absolute;top:10px;left:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
-#stage .pad{position:relative;flex:1 1 auto;background:#fff}
-#stage .pad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
-#stage .pad .ph{position:absolute;left:12px;top:8px;color:#999;font-size:14px;pointer-events:none}
+#stage .cam canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#stage .cam .ph{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#fff;font-size:15px;text-shadow:0 1px 3px #000;pointer-events:none}
 #stage .bar{display:flex;gap:10px;padding:10px;background:#f4f4f4;align-items:center}
 #stage .bar button{flex:1;font-size:17px;padding:14px 8px;border-radius:12px}
 #stage .bar .msg{flex:2;font-size:13px;color:#c62828}
@@ -70,8 +69,9 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     <div class="rec">● REC <span id="sec">0</span>s</div>
     <div class="clock" id="clock"></div>
     <div class="hint">請唸：<span id="stmt2"></span></div>
+    <canvas id="sig"></canvas>
+    <div class="ph">直接在畫面上簽名</div>
   </div>
-  <div class="pad"><canvas id="sig"></canvas><div class="ph">請在這裡簽名</div></div>
   <div class="bar">
     <button type="button" id="clr">清除</button>
     <span class="msg" id="smsg"></span>
@@ -85,7 +85,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
   const say = t => { $('smsg').textContent = t; $('msg').textContent = t; };
   window.addEventListener('error', e => say('程式錯誤：' + e.message));
   window.addEventListener('unhandledrejection', e => say('程式錯誤：' + (e.reason && e.reason.message || e.reason)));
-  const MAX = 45, W = 480, H = 800, CAM = 0.38;
+  const MAX = 45, W = 480; let H = 800;
   let stamped = '', stampDone = false;
   let stream = null, rec = null, chunks = [], blob = null, timer = null, sec = 0, raf = 0, inked = false, composite = false, autoStopped = false;
   const live = $('live'), sig = $('sig'), sx = sig.getContext('2d');
@@ -125,7 +125,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     const r = sig.getBoundingClientRect(), d = window.devicePixelRatio || 1;
     sig.width = Math.round(r.width * d); sig.height = Math.round(r.height * d);
     sx.setTransform(1, 0, 0, 1, 0, 0);
-    sx.lineWidth = 4 * d; sx.lineCap = 'round'; sx.lineJoin = 'round'; sx.strokeStyle = '#111';
+    sx.lineWidth = 5 * d; sx.lineCap = 'round'; sx.lineJoin = 'round'; sx.strokeStyle = '#fff'; sx.shadowColor = 'rgba(0,0,0,.9)'; sx.shadowBlur = 3 * d;   // 白字黑邊：疊在任何畫面上都看得清楚
   }
   const open = () => { $('stage').classList.add('on'); document.body.style.overflow = 'hidden'; requestAnimationFrame(sizePad); };
   const shut = () => { $('stage').classList.remove('on'); document.body.style.overflow = ''; };
@@ -150,12 +150,12 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
 
   // 合成：上方鏡頭、下方簽名，跟手機上看到的版面一樣，錄進同一段影片
   function draw() {
-    const ch = H * CAM, vw = live.videoWidth || 640, vh = live.videoHeight || 480, s = Math.max(W / vw, ch / vh);
-    ox.fillStyle = '#000'; ox.fillRect(0, 0, W, ch);
-    ox.save(); ox.beginPath(); ox.rect(0, 0, W, ch); ox.clip(); ox.translate(W, 0); ox.scale(-1, 1);
-    ox.drawImage(live, (W - vw * s) / 2, (ch - vh * s) / 2, vw * s, vh * s); ox.restore();
-    ox.fillStyle = '#fff'; ox.fillRect(0, ch, W, H - ch);
-    ox.drawImage(sig, 0, ch, W, H - ch);
+    // 熊哥 10-29：「簽名要蓋在影片上」→ 鏡頭畫面鋪滿，簽名直接疊在畫面上（與手機上看到的一致）
+    const vw = live.videoWidth || 640, vh = live.videoHeight || 480, s = Math.max(W / vw, H / vh);
+    ox.fillStyle = '#000'; ox.fillRect(0, 0, W, H);
+    ox.save(); ox.translate(W, 0); ox.scale(-1, 1);
+    ox.drawImage(live, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s); ox.restore();
+    ox.drawImage(sig, 0, 0, W, H);
     ox.font = '600 18px monospace'; const t = ts(), tw = ox.measureText(t).width;
     ox.fillStyle = 'rgba(0,0,0,.55)'; ox.fillRect(W - tw - 20, 8, tw + 14, 28); ox.fillStyle = '#fff'; ox.fillText(t, W - tw - 13, 28);
     raf = requestAnimationFrame(draw);
@@ -174,6 +174,8 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…'; say('');
     open();
     if (!(await openCam())) { $('rec').disabled = false; return; }
+    // 合成畫布的長寬比跟手機上的鏡頭區一致，簽名在影片裡的位置才不會被拉長
+    { const r = document.querySelector('#stage .cam').getBoundingClientRect(); H = Math.round(W * (r.height / r.width || 800 / 480) / 2) * 2; out.width = W; out.height = H; }
     chunks = []; blob = null; sec = 0; inked = false; autoStopped = false; stamped = ''; stampDone = false; $('sec').textContent = '0';
     sx.clearRect(0, 0, sig.width, sig.height);
     const type = pick();
@@ -216,7 +218,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     const d = window.devicePixelRatio || 1;
     if (!stamped) stamped = '簽署時間 ' + ts();   // 重送時沿用第一次的時間，不重複蓋
     const st = stamped;
-    if (!stampDone) { stampDone = true; sx.save(); sx.font = (14 * d) + 'px monospace'; sx.fillStyle = '#555'; sx.textAlign = 'right'; sx.fillText(st, sig.width - 10 * d, sig.height - 10 * d); sx.restore(); }
+    if (!stampDone) { stampDone = true; sx.save(); sx.font = (14 * d) + 'px monospace'; sx.fillStyle = '#fff'; sx.textAlign = 'right'; sx.fillText(st, sig.width - 10 * d, sig.height - 10 * d); sx.restore(); }
     fd.append('signed_at_client', st.replace('簽署時間 ', ''));
     fd.append('signature', await new Promise(r => sig.toBlob(r, 'image/png')), 'signature.png');
     fd.append('video', blob, 'video.' + (blob.type.includes('mp4') ? 'mp4' : 'webm'));

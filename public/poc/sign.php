@@ -21,7 +21,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
 #stage .cam .clock{position:absolute;top:8px;right:10px;color:#fff;font:600 15px/1.2 ui-monospace,monospace;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
 #stage .cam .rec{position:absolute;top:10px;left:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
 #stage .cam canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
-#stage .cam .ph{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#fff;font-size:15px;text-shadow:0 1px 3px #000;pointer-events:none}
+#stage .cam .ph{position:absolute;left:0;right:0;bottom:44px;text-align:center;color:#fff;font-size:15px;text-shadow:0 1px 3px #000;pointer-events:none}
 #stage .bar{display:flex;gap:10px;padding:10px;background:#f4f4f4;align-items:center}
 #stage .bar button{flex:1;font-size:17px;padding:14px 8px;border-radius:12px}
 #stage .bar .msg{flex:2;font-size:13px;color:#c62828}
@@ -169,7 +169,10 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
   $('clr').onclick = () => { sx.clearRect(0, 0, sig.width, sig.height); inked = false; };
 
   $('rec').onclick = async () => {
-    if (!$('consent').checked) { $('rs').textContent = '請先勾選同意錄影'; return; }
+    // 熊哥 10-29：資料沒填就進簽名，送出才報錯又回不去 → 進入錄影前先檢查全部欄位
+    const miss = [['recipient', '請先填寫簽收人代稱'], ['items', '請先填寫物資品項與數量']].find(([n]) => !$('f').elements[n].value.trim());
+    if (miss) { $('rs').textContent = miss[1]; $('f').elements[miss[0]].focus(); return; }
+    if (!$('consent').checked) { $('rs').textContent = '請先勾選同意錄影'; $('consent').focus(); return; }
     if (!window.MediaRecorder) { $('rs').textContent = '這個瀏覽器不支援錄影'; return; }
     $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…'; say('');
     open();
@@ -228,7 +231,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
       const res = await fetch('/poc/save.php', { method: 'POST', body: fd, credentials: 'same-origin' });
       const j = await res.json();
       if (j.id) location.href = '/poc/view.php?id=' + j.id;
-      else { say(j.error || '送出失敗'); $('go').disabled = false; }
+      else { shut(); $('rec').disabled = false; say(''); $('rs').textContent = (j.error || '送出失敗') + '　請修正後再按一次重新錄影簽名。'; }   // 伺服器退件：回到表單，不可困在全螢幕
     } catch (e) { say('送出失敗：' + e.message + '（可再按一次送出重試）'); $('go').disabled = false; }
   }
 })();

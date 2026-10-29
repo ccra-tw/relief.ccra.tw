@@ -18,6 +18,17 @@ echo '<tr><th>物資</th><td>' . nl2br(h($m['items'])) . '</td></tr>';
 echo '<tr><th>聲明內容</th><td>' . h($m['statement']) . '</td></tr>';
 echo '<tr><th>經手同工</th><td>' . h($m['worker']) . '</td></tr>';
 echo '<tr><th>簽名合成進錄影</th><td>' . (!empty($m['composite']) ? '是（影片裡看得到簽名過程）' : '否（此裝置不支援合成，簽名另存）') . '</td></tr>';
+$g = $m['gps'] ?? null;
+if ($g !== null) {
+    $gl = ['denied' => '簽收時未允許取得位置', 'unavailable' => '手機取不到位置', 'timeout' => '取得位置逾時', 'unsupported' => '此瀏覽器不支援', 'invalid' => '位置資料格式不對', 'none' => '未取得'];
+    echo '<tr><th>簽收位置（GPS）</th><td>' . (($g['status'] ?? '') === 'ok'
+        ? h($g['lat'] . ', ' . $g['lng']) . (isset($g['acc_m']) ? '（誤差約 ' . (int)$g['acc_m'] . ' 公尺）' : '') . '<br><a href="https://www.google.com/maps?q=' . rawurlencode($g['lat'] . ',' . $g['lng']) . '" target="_blank" rel="noopener">在地圖上看</a>'
+        : h($gl[$g['status'] ?? 'none'] ?? '未取得')) . '</td></tr>';
+}
+$fc = $m['face'] ?? null;
+if ($fc !== null) echo '<tr><th>臉部偵測</th><td>' . (($fc['status'] ?? '') === 'ok'
+    ? '錄影期間 ' . (int)$fc['hits'] . '／' . (int)$fc['checks'] . ' 次檢查有偵測到臉（' . round(($fc['ratio'] ?? 0) * 100) . '%）<br><small>只判斷畫面裡有沒有人臉，不辨識是誰</small>'
+    : ($fc['status'] === 'unavailable' ? '偵測模組沒載入成功（網路或裝置不支援），未檢查' : '未檢查')) . '</td></tr>';
 echo '<tr><th>錄影同意</th><td>' . ($m['consent'] ? '已勾選同意' : '—') . '</td></tr>';
 echo '</table>';
 if (!empty($m['snapshot_sha256'])) echo '<h2>完成截圖（送出那一刻：鏡頭畫面＋簽名＋時間）</h2><img src="/poc/file.php?id=' . h($m['id']) . '&amp;k=snap" alt="完成截圖" style="width:100%;max-width:420px;border-radius:12px">';

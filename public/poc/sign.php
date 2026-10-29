@@ -21,6 +21,9 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
 #stage .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 #stage .cam .hint{position:absolute;left:10px;right:10px;top:44px;color:#fff;font-size:14px;line-height:1.4;text-shadow:0 1px 3px #000}
 #stage .cam .clock{position:absolute;top:8px;right:10px;color:#fff;font:600 15px/1.2 ui-monospace,monospace;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
+#stage .cam .face{position:absolute;top:36px;left:10px;font-weight:700;font-size:14px;padding:2px 8px;border-radius:8px;color:#fff;background:rgba(0,0,0,.45)}
+#stage .cam .face.yes{background:rgba(10,125,59,.8)}#stage .cam .face.no{background:rgba(198,40,40,.85)}
+#stage .cam .hint{top:68px}
 #stage .cam .rec{position:absolute;top:10px;left:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
 #stage .cam canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 #stage .cam .ph{position:absolute;left:0;right:0;bottom:44px;text-align:center;color:#fff;font-size:15px;text-shadow:0 1px 3px #000;pointer-events:none}
@@ -38,6 +41,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     <li>按「開始錄影並簽名」：會開啟鏡頭並進入全螢幕，上方是鏡頭、下方白色區域簽名。</li>
     <li>請簽收人看著鏡頭唸出畫面上的聲明，並在白色區域簽名（簽錯按「清除」重簽）。</li>
     <li>按「簽完送出」：錄影結束、鏡頭關閉並上傳，自動跳到收執頁，可播放確認。</li>
+    <li>畫面左上會顯示有沒有偵測到臉；從頭到尾都沒拍到臉就不能送出。手機問「允許取得位置」時按允許，不允許也可以送出。</li>
   </ol>
   <p><b>要用哪個瀏覽器</b>：安卓請用 <b>Chrome</b>，iPhone 請用 <b>Safari</b>。從 LINE、Telegram、Facebook 點進來的連結是 App 內建瀏覽器，常常不能開鏡頭——請點右上角選單選「在 Chrome（或 Safari）中開啟」。</p>
   <p><b>沒有跳出「允許使用相機／麥克風」怎麼辦</b></p>
@@ -55,7 +59,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
   <p><label>物資品項與數量<br><textarea name="items" rows="2" maxlength="200" required placeholder="例：白米 2 包、罐頭 6 罐"></textarea></label></p>
 
   <details open><summary>蒐集錄影的告知事項（請唸給或給簽收人看）</summary>
-    <p class="note">中華基督教救助協會為確認物資已交付本人，於本次簽收時錄製您的影像、聲音與簽名過程。用途僅限物資簽收佐證與內部查核；只有經手同工與督導主管可調閱；保存 <?= POC_KEEP_DAYS ?> 天（雛形測試期）後刪除。您可以拒絕錄影，改以紙本簽收，不影響您領取物資；也可以事後要求刪除。</p>
+    <p class="note">中華基督教救助協會為確認物資已交付本人，於本次簽收時錄製您的影像、聲音與簽名過程，並記錄簽收地點（手機定位，您可以不允許）；系統會在手機上自動檢查畫面中有沒有人臉，但不辨識身分。用途僅限物資簽收佐證與內部查核；只有經手同工與督導主管可調閱；保存 <?= POC_KEEP_DAYS ?> 天（雛形測試期）後刪除。您可以拒絕錄影，改以紙本簽收，不影響您領取物資；也可以事後要求刪除。</p>
   </details>
   <p><label class="chk"><input type="checkbox" name="consent" value="1" id="consent"><span>簽收人已了解上述告知事項，並同意本次錄影。</span></label></p>
   <p>錄影時請簽收人唸：<b id="stmt">我是＿＿＿，今天收到中華基督教救助協會提供的物資，數量正確。</b></p>
@@ -69,6 +73,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
   <div class="cam">
     <video id="live" playsinline muted autoplay></video>
     <div class="rec">● REC <span id="sec">0</span>s</div>
+    <div class="face" id="face"></div>
     <div class="clock" id="clock"></div>
     <div class="hint">請唸：<span id="stmt2"></span></div>
     <canvas id="sig"></canvas>
@@ -122,6 +127,33 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     };
   }
 
+  // 臉部偵測（熊哥 10-29 問「可以識別是否是臉嗎」，選 B）：MediaPipe 在手機上判斷畫面裡有沒有人臉，不上傳、不辨識是誰。
+  // 模組在背景載入；載不到（網路、舊手機）就不檢查、不擋送出，收執頁註明「未檢查」。
+  const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+  let fdet = null, faceState = 'loading', fChecks = 0, fHits = 0, fTimer = null;
+  import(MP + '/vision_bundle.mjs').then(async v => {
+    const files = await v.FilesetResolver.forVisionTasks(MP + '/wasm');
+    fdet = await v.FaceDetector.createFromOptions(files, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite', delegate: 'CPU' }, runningMode: 'VIDEO', minDetectionConfidence: 0.5 });
+    faceState = 'ok';
+  }).catch(() => { faceState = 'unavailable'; });
+  function checkFace() {
+    if (!fdet || live.readyState < 2) { $('face').textContent = faceState === 'loading' ? '臉部偵測載入中…' : ''; $('face').className = 'face'; return; }
+    try {
+      const has = fdet.detectForVideo(live, performance.now()).detections.length > 0;
+      fChecks++; if (has) fHits++;
+      $('face').textContent = has ? '✓ 偵測到臉' : '⚠ 沒看到臉，請對著鏡頭'; $('face').className = 'face ' + (has ? 'yes' : 'no');
+    } catch (_) {}
+  }
+  // 位置（選 B：不允許也照常送出，收執頁記下原因）
+  let gps = { status: 'none' };
+  function getGps() {
+    if (!navigator.geolocation) { gps = { status: 'unsupported' }; return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { gps = { status: 'ok', lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }; },
+      e => { gps = { status: e.code === 1 ? 'denied' : e.code === 3 ? 'timeout' : 'unavailable' }; },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }
+
   // 全螢幕簽名區：畫布像素跟著實際尺寸（含高解析度螢幕），筆畫才不會糊
   function sizePad() {
     const r = sig.getBoundingClientRect(), d = window.devicePixelRatio || 1;
@@ -130,7 +162,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     sx.lineWidth = 5 * d; sx.lineCap = 'round'; sx.lineJoin = 'round'; sx.strokeStyle = '#fff'; sx.shadowColor = 'rgba(0,0,0,.9)'; sx.shadowBlur = 3 * d;   // 白字黑邊：疊在任何畫面上都看得清楚
   }
   const open = () => { $('stage').classList.add('on'); document.body.style.overflow = 'hidden'; requestAnimationFrame(sizePad); };
-  const shut = () => { $('stage').classList.remove('on'); document.body.style.overflow = ''; };
+  const shut = () => { $('stage').classList.remove('on'); document.body.style.overflow = ''; clearInterval(fTimer); };
 
   async function openCam() {
     try {
@@ -191,6 +223,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…'; say('');
     open();
     if (!(await openCam())) { $('rec').disabled = false; return; }
+    gps = { status: 'none' }; getGps();   // 鏡頭權限問完再問位置，兩個詢問不要疊在一起
     // 合成畫布的長寬比跟手機上的鏡頭區一致，簽名在影片裡的位置才不會被拉長
     { const r = document.querySelector('#stage .cam').getBoundingClientRect(); H = Math.round(W * (r.height / r.width || 800 / 480) / 2) * 2; out.width = W; out.height = H; }
     chunks = []; blob = null; snapP = null; sec = 0; inked = false; autoStopped = false; stamped = ''; stampDone = false; $('sec').textContent = '0';
@@ -209,13 +242,14 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     }
     rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     rec.onstop = () => {
-      cancelAnimationFrame(raf); clearInterval(timer);
+      cancelAnimationFrame(raf); clearInterval(timer); clearInterval(fTimer);
       blob = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' });
       closeCam();   // 簽完送出就關閉錄影：停止錄影的同時關掉鏡頭與麥克風
       upload();
     };
     try { rec.start(1000); } catch (e) { say('無法開始錄影：' + e.message); closeCam(); shut(); $('rec').disabled = false; return; }
     $('go').disabled = false; $('rs').textContent = '';
+    fChecks = 0; fHits = 0; clearInterval(fTimer); checkFace(); fTimer = setInterval(checkFace, 500);
     // 到上限仍未送出：停止錄影但不自動送出，避免沒簽完的影片被上傳
     timer = setInterval(() => { sec++; $('sec').textContent = sec; if (sec >= MAX) { autoStopped = true; rec.stop(); } }, 1000);
   };
@@ -224,6 +258,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     if (rec && rec.state !== 'recording' && blob && inked) { $('go').disabled = true; upload(); return; }   // 上傳失敗後重送同一段錄影
     if (!rec || rec.state !== 'recording') return;
     if (!inked) { say('還沒簽名，請直接在畫面上簽名後再送出'); return; }
+    if (faceState === 'ok' && fHits === 0) { checkFace(); if (fHits === 0) { say('錄影中都沒偵測到臉，請簽收人對著鏡頭，看到「✓ 偵測到臉」再送出'); return; } }
     $('go').disabled = true;
     stampSig();
     snapshot();   // 鏡頭還開著的最後一刻拍下完成截圖，再停止錄影（簽署時間也會錄進最後幾格）
@@ -264,6 +299,10 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
     fd.append('signature', await new Promise(r => sig.toBlob(r, 'image/png')), 'signature.png');
     fd.append('video', blob, 'video.' + (blob.type.includes('mp4') ? 'mp4' : 'webm'));
     fd.append('composite', composite ? '1' : '0');
+    fd.append('gps_status', gps.status);
+    if (gps.status === 'ok') { fd.append('gps_lat', gps.lat); fd.append('gps_lng', gps.lng); fd.append('gps_acc', gps.acc); }
+    fd.append('face_status', faceState === 'ok' ? 'ok' : 'unavailable');
+    fd.append('face_checks', fChecks); fd.append('face_hits', fHits);
     say('上傳中…');
     try {
       const res = await fetch('/poc/save.php', { method: 'POST', body: fd, credentials: 'same-origin' });

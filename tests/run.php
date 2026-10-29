@@ -597,6 +597,15 @@ $sm = $sid ? poc_load($sid) : null;
 ok($sm && poc_read($sm, 'snap') === $jpg && poc_verify($sm)['snapshot'] === true && is_file(poc_dir() . "/$sid/snapshot.jpg.enc"), '完成截圖加密存檔，解密後逐位元相同、雜湊吻合');
 ok(($pm['snapshot_sha256'] ?? null) === null && poc_verify($pm)['snapshot'] === null, '沒有完成截圖的紀錄（舊裝置）不算錯，驗證欄位為 null');
 ok(poc_save(['recipient' => '測試乙', 'items' => '罐頭', 'consent' => '1'], $png, $mp4, $pu, 'not-a-jpeg')[0] === null, '完成截圖不是 JPEG 就退件');
+ok(poc_gps(['gps_status' => 'ok', 'gps_lat' => '25.0123456', 'gps_lng' => '121.5', 'gps_acc' => '12.6']) === ['status' => 'ok', 'lat' => 25.012346, 'lng' => 121.5, 'acc_m' => 13], 'GPS 座標取到小數 6 位、誤差取整數公尺');
+ok(poc_gps(['gps_status' => 'denied', 'gps_lat' => '25']) === ['status' => 'denied'] && poc_gps(['gps_status' => 'ok', 'gps_lat' => '999', 'gps_lng' => '1'])['status'] === 'invalid' && poc_gps(['gps_status' => '<x>'])['status'] === 'none', 'GPS 不允許只記原因；超出範圍或亂填的狀態不收');
+ok(poc_face(['face_status' => 'ok', 'face_checks' => '20', 'face_hits' => '99']) === ['status' => 'ok', 'checks' => 20, 'hits' => 20, 'ratio' => 1.0] && poc_face(['face_status' => 'unavailable'])['status'] === 'unavailable', '臉部偵測次數夾在合理範圍，有臉次數不會超過檢查次數');
+[$gid] = poc_save(['recipient' => '測試丙', 'items' => '白米', 'consent' => '1', 'gps_status' => 'ok', 'gps_lat' => '25.03', 'gps_lng' => '121.56', 'gps_acc' => '8', 'face_status' => 'ok', 'face_checks' => '10', 'face_hits' => '9'], $png, $mp4, $pu);
+$gm = poc_load((string)$gid);
+$gm2 = $gm; $gm2['gps']['lat'] = 24.0;
+ok($gm && $gm['gps']['lat'] === 25.03 && $gm['face']['ratio'] === 0.9 && poc_verify($gm)['seal'] === true && poc_verify($gm2)['seal'] === false, '位置與臉部偵測結果存進紀錄並併入存證碼，事後改座標就對不上');
+[$c, $o] = page('poc/view.php', 'worker@example.test', [], ['id' => $gid]);
+ok(str_contains($o, '25.03, 121.56') && str_contains($o, '9／10'), '收執頁顯示簽收位置與臉部偵測結果');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

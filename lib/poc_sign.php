@@ -51,6 +51,26 @@ function poc_read(array $m, string $k): ?string {
     return is_file("$dir/$name") ? (string)file_get_contents("$dir/$name") : null;
 }
 
+// 位置（熊哥 10-29 選 B：取得 GPS，不允許也照常送出，只記下原因）
+function poc_gps(array $f): array {
+    $st = in_array($f['gps_status'] ?? '', ['ok', 'denied', 'unavailable', 'timeout', 'unsupported'], true) ? $f['gps_status'] : 'none';
+    if ($st !== 'ok') return ['status' => $st];
+    $lat = filter_var($f['gps_lat'] ?? '', FILTER_VALIDATE_FLOAT);
+    $lng = filter_var($f['gps_lng'] ?? '', FILTER_VALIDATE_FLOAT);
+    $acc = filter_var($f['gps_acc'] ?? '', FILTER_VALIDATE_FLOAT);
+    if ($lat === false || $lng === false || abs($lat) > 90 || abs($lng) > 180) return ['status' => 'invalid'];
+    return ['status' => 'ok', 'lat' => round($lat, 6), 'lng' => round($lng, 6), 'acc_m' => $acc === false ? null : (int)round(max(0, $acc))];
+}
+
+// 臉部偵測（手機端 MediaPipe 判斷畫面裡有沒有臉；不是辨識是誰）
+function poc_face(array $f): array {
+    $st = in_array($f['face_status'] ?? '', ['ok', 'unavailable'], true) ? $f['face_status'] : 'none';
+    if ($st !== 'ok') return ['status' => $st];
+    $n = max(0, min(10000, (int)($f['face_checks'] ?? 0)));
+    $hit = max(0, min($n, (int)($f['face_hits'] ?? 0)));
+    return ['status' => 'ok', 'checks' => $n, 'hits' => $hit, 'ratio' => $n ? round($hit / $n, 2) : 0.0];
+}
+
 function poc_client_ip(): string {
     // 經 Cloudflare 進來時，真實來源在 CF-Connecting-IP；直接連線才用 REMOTE_ADDR
     return substr((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
@@ -99,6 +119,8 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u, string $
         'video_sha256' => hash('sha256', $video),
         'encrypted' => true,
         'ip' => poc_client_ip(),
+        'gps' => poc_gps($f),
+        'face' => poc_face($f),
         'user_agent' => substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 300),
     ];
     $meta['seal'] = poc_seal($meta);

@@ -88,9 +88,28 @@ page_head('錄影簽名（雛形）', $u);
   const pick = () => ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
   $('stmt2').textContent = $('stmt').textContent;
   // App 內建瀏覽器（Telegram、LINE、Facebook、Android WebView）常不跳相機權限詢問（熊哥 10-29 安卓試用回報）→ 先提示改用 Chrome／Safari
-  if (/Telegram|Line\/|FBAN|FBAV|Instagram|; wv\)/i.test(navigator.userAgent) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
-    $('camerr').innerHTML = '這個瀏覽器可能無法開啟鏡頭（App 內建瀏覽器）。請點右上角「⋮」選「在 Chrome 開啟」（iPhone 請用 Safari），再登入一次。';
+  // 熊哥同日再問「有辦法去開預設瀏覽器而不是 app 內建的瀏覽器嗎」：
+  //   LINE：網址加 openExternalBrowser=1，LINE 會自己改用外部瀏覽器開（直接跳轉）
+  //   安卓其他 App（Telegram、Facebook、WebView）：intent:// 連結交給系統，用預設瀏覽器開
+  //   iPhone：沒有通用做法；試 x-safari-https://（新版 iOS 可用），不行就複製網址自己貼到 Safari
+  const ua = navigator.userAgent, here = location.href;
+  if (/Line\//i.test(ua) && !/[?&]openExternalBrowser=1/.test(location.search)) {
+    location.replace(here + (location.search ? '&' : '?') + 'openExternalBrowser=1');
+    return;
+  }
+  if (/Telegram|Line\/|FBAN|FBAV|Instagram|; wv\)/i.test(ua) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    const android = /Android/i.test(ua), u = new URL(here);
+    const ext = android ? 'intent://' + u.host + u.pathname + u.search + '#Intent;scheme=https;end'
+                        : 'x-safari-https://' + u.host + u.pathname + u.search;
+    $('camerr').innerHTML = '這是 App 內建瀏覽器，可能無法開啟鏡頭。'
+      + '<br><a class="btn primary" href="' + ext + '">用' + (android ? '手機預設瀏覽器' : ' Safari ') + '開啟這一頁</a> '
+      + '<button type="button" id="cpy">複製網址</button>'
+      + '<br><small>按了沒反應的話：點右上角選單選「在瀏覽器中開啟」，或按「複製網址」貼到 ' + (android ? 'Chrome' : 'Safari') + '。</small>';
     $('camerr').style.display = 'block';
+    $('cpy').onclick = async () => {
+      try { await navigator.clipboard.writeText(here); $('cpy').textContent = '已複製'; }
+      catch (_) { prompt('請長按複製這個網址：', here); }
+    };
   }
 
   // 全螢幕簽名區：畫布像素跟著實際尺寸（含高解析度螢幕），筆畫才不會糊

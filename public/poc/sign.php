@@ -18,6 +18,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
 #stage .cam{position:relative;flex:0 0 38%;overflow:hidden}
 #stage .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 #stage .cam .hint{position:absolute;left:10px;right:10px;bottom:8px;color:#fff;font-size:14px;line-height:1.4;text-shadow:0 1px 3px #000}
+#stage .cam .clock{position:absolute;top:8px;right:10px;color:#fff;font:600 15px/1.2 ui-monospace,monospace;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:8px}
 #stage .cam .rec{position:absolute;top:10px;left:10px;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
 #stage .pad{position:relative;flex:1 1 auto;background:#fff}
 #stage .pad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
@@ -67,6 +68,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
   <div class="cam">
     <video id="live" playsinline muted autoplay></video>
     <div class="rec">● REC <span id="sec">0</span>s</div>
+    <div class="clock" id="clock"></div>
     <div class="hint">請唸：<span id="stmt2"></span></div>
   </div>
   <div class="pad"><canvas id="sig"></canvas><div class="ph">請在這裡簽名</div></div>
@@ -84,9 +86,13 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
   window.addEventListener('error', e => say('程式錯誤：' + e.message));
   window.addEventListener('unhandledrejection', e => say('程式錯誤：' + (e.reason && e.reason.message || e.reason)));
   const MAX = 45, W = 480, H = 800, CAM = 0.38;
+  let stamped = '', stampDone = false;
   let stream = null, rec = null, chunks = [], blob = null, timer = null, sec = 0, raf = 0, inked = false, composite = false, autoStopped = false;
   const live = $('live'), sig = $('sig'), sx = sig.getContext('2d');
   const out = document.createElement('canvas'); out.width = W; out.height = H; const ox = out.getContext('2d');
+  // 時間戳（熊哥 10-29：「錄影簽名部分要加上時間戳」）：螢幕即時顯示、合成進影片、送出時蓋進簽名圖
+  const ts = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
+  setInterval(() => { $('clock').textContent = ts(); }, 500);
   const pick = () => ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
   $('stmt2').textContent = $('stmt').textContent;
   // App 內建瀏覽器（Telegram、LINE、Facebook、Android WebView）常不跳相機權限詢問（熊哥 10-29 安卓試用回報）→ 先提示改用 Chrome／Safari
@@ -150,7 +156,8 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     ox.drawImage(live, (W - vw * s) / 2, (ch - vh * s) / 2, vw * s, vh * s); ox.restore();
     ox.fillStyle = '#fff'; ox.fillRect(0, ch, W, H - ch);
     ox.drawImage(sig, 0, ch, W, H - ch);
-    ox.fillStyle = '#fff'; ox.font = '15px sans-serif'; ox.fillText(new Date().toLocaleString('zh-TW'), 10, 24);
+    ox.font = '600 18px monospace'; const t = ts(), tw = ox.measureText(t).width;
+    ox.fillStyle = 'rgba(0,0,0,.55)'; ox.fillRect(W - tw - 20, 8, tw + 14, 28); ox.fillStyle = '#fff'; ox.fillText(t, W - tw - 13, 28);
     raf = requestAnimationFrame(draw);
   }
 
@@ -167,7 +174,7 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…'; say('');
     open();
     if (!(await openCam())) { $('rec').disabled = false; return; }
-    chunks = []; blob = null; sec = 0; inked = false; autoStopped = false; $('sec').textContent = '0';
+    chunks = []; blob = null; sec = 0; inked = false; autoStopped = false; stamped = ''; stampDone = false; $('sec').textContent = '0';
     sx.clearRect(0, 0, sig.width, sig.height);
     const type = pick();
     const opts = Object.assign({ videoBitsPerSecond: 900000, audioBitsPerSecond: 64000 }, type ? { mimeType: type } : {});
@@ -205,6 +212,12 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;f
     if (autoStopped) { autoStopped = false; shut(); $('rec').disabled = false; $('rs').textContent = '已達 ' + MAX + ' 秒上限，錄影停止；請再按一次重新錄'; return; }
     $('stmtv').value = $('stmt').textContent;
     const fd = new FormData($('f'));
+    // 簽署時間蓋在簽名圖右下角（送出那一刻）；伺服器另記收到時間，兩者都在收執頁
+    const d = window.devicePixelRatio || 1;
+    if (!stamped) stamped = '簽署時間 ' + ts();   // 重送時沿用第一次的時間，不重複蓋
+    const st = stamped;
+    if (!stampDone) { stampDone = true; sx.save(); sx.font = (14 * d) + 'px monospace'; sx.fillStyle = '#555'; sx.textAlign = 'right'; sx.fillText(st, sig.width - 10 * d, sig.height - 10 * d); sx.restore(); }
+    fd.append('signed_at_client', st.replace('簽署時間 ', ''));
     fd.append('signature', await new Promise(r => sig.toBlob(r, 'image/png')), 'signature.png');
     fd.append('video', blob, 'video.' + (blob.type.includes('mp4') ? 'mp4' : 'webm'));
     fd.append('composite', composite ? '1' : '0');

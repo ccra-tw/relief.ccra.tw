@@ -11,7 +11,8 @@ $ok = fn($b) => $b ? '<span style="color:#0a7d3b">✔ 吻合</span>' : '<span st
 page_head('簽收收執（雛形）', $u);
 echo '<h1>簽收收執 <small class="tag">雛形</small></h1>';
 echo '<table class="kv">';
-echo '<tr><th>時間</th><td>' . h(date('Y-m-d H:i:s', strtotime($m['created_at']))) . '</td></tr>';
+echo '<tr><th>伺服器收到時間</th><td>' . h(date('Y-m-d H:i:s', strtotime($m['created_at']))) . '</td></tr>';
+if (!empty($m['signed_at_client'])) echo '<tr><th>手機簽署時間</th><td>' . h($m['signed_at_client']) . '（蓋在簽名圖上；影片右上角也有逐秒時間）</td></tr>';
 echo '<tr><th>簽收人（代稱）</th><td>' . h($m['recipient']) . '</td></tr>';
 echo '<tr><th>物資</th><td>' . nl2br(h($m['items'])) . '</td></tr>';
 echo '<tr><th>聲明內容</th><td>' . h($m['statement']) . '</td></tr>';

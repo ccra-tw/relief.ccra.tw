@@ -79,7 +79,8 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
 
     $meta = [
         'id' => $id,
-        'created_at' => date('c'),
+        'created_at' => date('c'),   // 伺服器收到的時間（以主機時鐘為準）
+        'signed_at_client' => substr(preg_replace('/[^0-9\/: ]/', '', (string)($f['signed_at_client'] ?? '')), 0, 19),   // 手機上按送出那一刻（蓋在簽名圖上的時間）
         'recipient' => $who,
         'items' => $items,
         'statement' => trim((string)($f['statement'] ?? '')),

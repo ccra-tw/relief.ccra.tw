@@ -69,6 +69,11 @@ page_head('錄影簽名（雛形）', $u);
   const out = document.createElement('canvas'); out.width = W; out.height = H; const ox = out.getContext('2d');
   const pick = () => ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
   $('stmt2').textContent = $('stmt').textContent;
+  // App 內建瀏覽器（Telegram、LINE、Facebook、Android WebView）常不跳相機權限詢問（熊哥 10-29 安卓試用回報）→ 先提示改用 Chrome／Safari
+  if (/Telegram|Line\/|FBAN|FBAV|Instagram|; wv\)/i.test(navigator.userAgent) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    $('camerr').innerHTML = '這個瀏覽器可能無法開啟鏡頭（App 內建瀏覽器）。請點右上角「⋮」選「在 Chrome 開啟」（iPhone 請用 Safari），再登入一次。';
+    $('camerr').style.display = 'block';
+  }
 
   // 全螢幕簽名區：畫布像素跟著實際尺寸（含高解析度螢幕），筆畫才不會糊
   function sizePad() {
@@ -82,6 +87,7 @@ page_head('錄影簽名（雛形）', $u);
 
   async function openCam() {
     try {
+      if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) throw new Error('此瀏覽器不支援開啟鏡頭，請改用 Chrome 或 Safari');
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
       live.srcObject = stream; $('camerr').style.display = 'none';
       // iPhone Safari：要主動 play()，loadeddata 也可能不觸發；最多等 2 秒就往下走，不可卡住

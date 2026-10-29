@@ -11,8 +11,8 @@ $u = require_role(POC_ROLES);
 page_head('錄影簽名（雛形）', $u);
 ?>
 <style>
-label.chk{display:flex;align-items:flex-start;gap:10px;font-weight:700;cursor:pointer}
-label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0;flex:none;accent-color:var(--brand)}
+label.chk{display:flex;flex-direction:row;align-items:flex-start;gap:10px;font-weight:700;cursor:pointer}
+label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!important;padding:0;flex:none;accent-color:var(--brand)}
 #stage{display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column}
 #stage.on{display:flex}
 #stage .cam{position:relative;flex:1 1 auto;overflow:hidden}

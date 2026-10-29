@@ -2,3 +2,5 @@
 # 由 deploy.sh 安裝到 /etc/cron.d/relief-reminders
 17 7 * * * www-data php /var/www/relief.ccra.tw/bin/reminders.php >> /var/log/relief-reminders.log 2>&1
 47 6 * * * www-data php /var/www/relief.ccra.tw/bin/church_sync.php >> /var/log/relief-reminders.log 2>&1
+# 錄影簽名雛形：每日把前一天的存證碼清單寄到主機以外的信箱（電子簽章法第 8 條的驗證資料留存）
+7 0 * * * www-data php /var/www/relief.ccra.tw/bin/poc_digest.php >> /var/log/relief-reminders.log 2>&1

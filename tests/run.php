@@ -570,7 +570,16 @@ ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'vi
 ok($pm && $pm['composite'] === true, '記錄簽名有合成進錄影');
 $pm2 = $pm; $pm2['items'] = '白米 20 包';
 ok(poc_verify($pm2)['seal'] === false, '內容被改（數量 2→20）存證碼就對不上');
-file_put_contents(poc_dir() . "/$id/" . $pm['video_file'], 'x', FILE_APPEND);
+ok(is_file(poc_dir() . "/$id/signature.png.enc") && !is_file(poc_dir() . "/$id/signature.png") && substr(file_get_contents(poc_dir() . "/$id/signature.png.enc"), 0, 8) !== "PNG
+
+" && !str_contains(file_get_contents(poc_dir() . "/$id/" . $pm['video_file'] . '.enc'), 'ftypisom'), '簽名與錄影加密存放，磁碟上看不到原始內容');
+ok(poc_read($pm, 'sig') === $png, '解密後簽名與原檔逐位元相同');
+ok(array_key_exists('ip', $pm) && $pm['encrypted'] === true, '記錄來源 IP 欄位與加密旗標');
+$today = date('Y-m-d', strtotime($pm['created_at']));
+ok(poc_digest($today) === 1 && poc_digest($today) === 1 && (int)$db->query("SELECT count(*) FROM notification WHERE kind = 'poc_digest'")->fetchColumn() === 1, '每日存證碼清單排進通知佇列，同一天重跑不重寄');
+$nb = (string)$db->query("SELECT body FROM notification WHERE kind = 'poc_digest'")->fetchColumn();
+ok(str_contains($nb, $pm['seal']) && !str_contains($nb, '測試甲') && !str_contains($nb, '白米'), '存證碼清單只有編號與雜湊，不含姓名與物資內容');
+file_put_contents(poc_dir() . "/$id/" . $pm['video_file'] . '.enc', 'x', FILE_APPEND);
 ok(poc_verify($pm)['video'] === false, '錄影檔被動過，錄影雜湊就對不上');
 [$c, $o] = page('poc/index.php', 'church-demo');
 ok(str_contains($o, '沒有這個功能的權限'), '教會帳號不能進錄影簽名雛形');

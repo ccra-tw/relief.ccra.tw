@@ -26,6 +26,24 @@ page_head('錄影簽名（雛形）', $u);
 </style>
 <h1>物資簽收：錄影＋簽名 <small class="tag">雛形</small></h1>
 <p class="note">雛形測試用，請勿填真實姓名或個資；簽收人請用代稱（例如「測試甲」）。</p>
+<details class="help"><summary><b>使用說明（第一次用請先看）</b></summary>
+  <p><b>操作步驟</b></p>
+  <ol>
+    <li>填簽收人代稱與物資品項。</li>
+    <li>把下方「告知事項」唸給簽收人聽，對方同意後打勾。</li>
+    <li>按「開始錄影並簽名」：會開啟鏡頭並進入全螢幕，上方是鏡頭、下方白色區域簽名。</li>
+    <li>請簽收人看著鏡頭唸出畫面上的聲明，並在白色區域簽名（簽錯按「清除」重簽）。</li>
+    <li>按「簽完送出」：錄影結束、鏡頭關閉並上傳，自動跳到收執頁，可播放確認。</li>
+  </ol>
+  <p><b>要用哪個瀏覽器</b>：安卓請用 <b>Chrome</b>，iPhone 請用 <b>Safari</b>。從 LINE、Telegram、Facebook 點進來的連結是 App 內建瀏覽器，常常不能開鏡頭——請點右上角選單選「在 Chrome（或 Safari）中開啟」。</p>
+  <p><b>沒有跳出「允許使用相機／麥克風」怎麼辦</b></p>
+  <ul>
+    <li>安卓 Chrome：點網址列左邊的圖示 →「權限」→ 相機、麥克風改成「允許」，重新整理再按一次。</li>
+    <li>iPhone Safari：點網址列左邊的「大小」→「網站設定」→ 相機、麥克風改成「允許」；或到「設定 → Safari → 相機／麥克風」改成「詢問」。</li>
+    <li>還是不行：把畫面上的紅字訊息截圖給資訊部。</li>
+  </ul>
+  <p><b>其他</b>：錄影最長 45 秒，超過會自動停下請重錄；簽收人不同意錄影，請改用紙本簽收，不影響領取物資。</p>
+</details>
 <form id="f" onsubmit="return false">
   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
   <input type="hidden" name="statement" id="stmtv">

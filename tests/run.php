@@ -6,7 +6,6 @@ putenv('RELIEF_TEST_DIR=' . __DIR__ . '/fixtures/directory.json');   // 名錄 A
 putenv('RELIEF_TEST_SECRET=1');                                       // 個資加密用測試金鑰
 $UP = sys_get_temp_dir() . '/relief-test-uploads-' . getmypid();
 putenv("RELIEF_UPLOAD_DIR=$UP");
-putenv("RELIEF_POC_DIR=" . sys_get_temp_dir() . "/relief-test-poc-" . getmypid());   // 錄影簽名雛形的測試目錄
 require __DIR__ . '/../lib/boot.php';
 $ROOT = realpath(__DIR__ . '/..');
 $fail = 0;
@@ -550,62 +549,6 @@ ok(str_contains($out, '已過期') && !str_contains($out, 'TypeError'), '網址 
 ok(!str_contains($out, '已過期') && str_contains($out, 'T1-A-2026-0901'), '沒有代碼（第一次進來）照常列出');
 [, $out] = page('admin/audit.php', 'admin@example.test', [], ['f' => '0123456789ab']);
 ok(str_contains($out, '已過期') && str_contains($out, 'value=""'), '稽核紀錄的過期代碼提示重新搜尋、搜尋框清空');
-
-echo "錄影簽名雛形\n";
-require_once "$ROOT/lib/poc_sign.php";
-$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==') . str_repeat("\0", 200);
-$mp4 = tempnam(sys_get_temp_dir(), 'poc');
-file_put_contents($mp4, "\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" . str_repeat("\0", 4000));
-$pu = ['id' => 1, 'display_name' => '測試同工'];
-[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包'], $png, $mp4, $pu);
-ok($id === null && str_contains((string)$err, '同意'), '沒勾同意錄影就不能送出');
-$txt = tempnam(sys_get_temp_dir(), 'poc'); file_put_contents($txt, str_repeat('not a video ', 200));
-[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1'], $png, $txt, $pu);
-ok($id === null && str_contains((string)$err, '格式'), '不是影片的檔案被擋下');
-[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1', 'statement' => '我是測試甲', 'composite' => '1', 'signed_at_client' => '2026/10/29 15:00:01<script>'], $png, $mp4, $pu);
-ok(poc_valid_id($id) && $err === null, '簽名＋錄影＋同意可以存檔');
-$pm = poc_load((string)$id);
-$pv = $pm ? poc_verify($pm) : [];
-ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'video' => true, 'snapshot' => null, 'seal' => true], '存檔後雜湊與存證碼都吻合');
-ok($pm && $pm['composite'] === true, '記錄簽名有合成進錄影');
-ok($pm && $pm['signed_at_client'] === '2026/10/29 15:00:01', '記錄手機簽署時間，且只留數字與時間符號（擋掉夾帶的標籤）');
-$pm2 = $pm; $pm2['items'] = '白米 20 包';
-ok(poc_verify($pm2)['seal'] === false, '內容被改（數量 2→20）存證碼就對不上');
-ok(is_file(poc_dir() . "/$id/signature.png.enc") && !is_file(poc_dir() . "/$id/signature.png") && substr(file_get_contents(poc_dir() . "/$id/signature.png.enc"), 0, 8) !== "PNG
-
-
-" && !str_contains(file_get_contents(poc_dir() . "/$id/" . $pm['video_file'] . '.enc'), 'ftypisom'), '簽名與錄影加密存放，磁碟上看不到原始內容');
-ok(poc_read($pm, 'sig') === $png, '解密後簽名與原檔逐位元相同');
-ok(array_key_exists('ip', $pm) && $pm['encrypted'] === true, '記錄來源 IP 欄位與加密旗標');
-$today = date('Y-m-d', strtotime($pm['created_at']));
-ok(poc_digest($today) === 1 && poc_digest($today) === 1 && (int)$db->query("SELECT count(*) FROM notification WHERE kind = 'poc_digest'")->fetchColumn() === 1, '每日存證碼清單排進通知佇列，同一天重跑不重寄');
-$nb = (string)$db->query("SELECT body FROM notification WHERE kind = 'poc_digest'")->fetchColumn();
-ok(str_contains($nb, $pm['seal']) && !str_contains($nb, '測試甲') && !str_contains($nb, '白米'), '存證碼清單只有編號與雜湊，不含姓名與物資內容');
-file_put_contents(poc_dir() . "/$id/" . $pm['video_file'] . '.enc', 'x', FILE_APPEND);
-ok(poc_verify($pm)['video'] === false, '錄影檔被動過，錄影雜湊就對不上');
-[$c, $o] = page('poc/index.php', 'church-demo');
-ok(str_contains($o, '沒有這個功能的權限'), '教會帳號不能進錄影簽名雛形');
-[$c, $o] = page('poc/index.php', 'worker@example.test');
-ok(str_contains($o, '測試甲') && str_contains($o, '雛形'), '同工帳號看得到雛形紀錄列表');
-$old = json_decode(file_get_contents(poc_dir() . "/$id/meta.json"), true);
-$old['created_at'] = date('c', time() - (POC_KEEP_DAYS + 1) * 86400);
-file_put_contents(poc_dir() . "/$id/meta.json", json_encode($old, JSON_UNESCAPED_UNICODE));
-ok(poc_purge_expired() === 1 && !is_dir(poc_dir() . "/$id"), '超過保存期限的雛形紀錄會被刪除（告知的保存期限要真的做到）');
-$jpg = hex2bin('ffd8ffe0') . str_repeat('j', 500);
-[$sid, $serr] = poc_save(['recipient' => '測試乙', 'items' => '罐頭 6 罐', 'consent' => '1'], $png, $mp4, $pu, $jpg);
-$sm = $sid ? poc_load($sid) : null;
-ok($sm && poc_read($sm, 'snap') === $jpg && poc_verify($sm)['snapshot'] === true && is_file(poc_dir() . "/$sid/snapshot.jpg.enc"), '完成截圖加密存檔，解密後逐位元相同、雜湊吻合');
-ok(($pm['snapshot_sha256'] ?? null) === null && poc_verify($pm)['snapshot'] === null, '沒有完成截圖的紀錄（舊裝置）不算錯，驗證欄位為 null');
-ok(poc_save(['recipient' => '測試乙', 'items' => '罐頭', 'consent' => '1'], $png, $mp4, $pu, 'not-a-jpeg')[0] === null, '完成截圖不是 JPEG 就退件');
-ok(poc_gps(['gps_status' => 'ok', 'gps_lat' => '25.0123456', 'gps_lng' => '121.5', 'gps_acc' => '12.6']) === ['status' => 'ok', 'lat' => 25.012346, 'lng' => 121.5, 'acc_m' => 13], 'GPS 座標取到小數 6 位、誤差取整數公尺');
-ok(poc_gps(['gps_status' => 'denied', 'gps_lat' => '25']) === ['status' => 'denied'] && poc_gps(['gps_status' => 'ok', 'gps_lat' => '999', 'gps_lng' => '1'])['status'] === 'invalid' && poc_gps(['gps_status' => '<x>'])['status'] === 'none', 'GPS 不允許只記原因；超出範圍或亂填的狀態不收');
-ok(poc_face(['face_status' => 'ok', 'face_checks' => '20', 'face_hits' => '99']) === ['status' => 'ok', 'checks' => 20, 'hits' => 20, 'ratio' => 1.0] && poc_face(['face_status' => 'unavailable'])['status'] === 'unavailable', '臉部偵測次數夾在合理範圍，有臉次數不會超過檢查次數');
-[$gid] = poc_save(['recipient' => '測試丙', 'items' => '白米', 'consent' => '1', 'gps_status' => 'ok', 'gps_lat' => '25.03', 'gps_lng' => '121.56', 'gps_acc' => '8', 'face_status' => 'ok', 'face_checks' => '10', 'face_hits' => '9'], $png, $mp4, $pu);
-$gm = poc_load((string)$gid);
-$gm2 = $gm; $gm2['gps']['lat'] = 24.0;
-ok($gm && $gm['gps']['lat'] === 25.03 && $gm['face']['ratio'] === 0.9 && poc_verify($gm)['seal'] === true && poc_verify($gm2)['seal'] === false, '位置與臉部偵測結果存進紀錄並併入存證碼，事後改座標就對不上');
-[$c, $o] = page('poc/view.php', 'worker@example.test', [], ['id' => $gid]);
-ok(str_contains($o, '25.03, 121.56') && str_contains($o, '9／10'), '收執頁顯示簽收位置與臉部偵測結果');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

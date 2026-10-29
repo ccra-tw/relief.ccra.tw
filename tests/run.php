@@ -566,7 +566,7 @@ ok($id === null && str_contains((string)$err, '格式'), '不是影片的檔案�
 ok(poc_valid_id($id) && $err === null, '簽名＋錄影＋同意可以存檔');
 $pm = poc_load((string)$id);
 $pv = $pm ? poc_verify($pm) : [];
-ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'video' => true, 'seal' => true], '存檔後雜湊與存證碼都吻合');
+ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'video' => true, 'snapshot' => null, 'seal' => true], '存檔後雜湊與存證碼都吻合');
 ok($pm && $pm['composite'] === true, '記錄簽名有合成進錄影');
 ok($pm && $pm['signed_at_client'] === '2026/10/29 15:00:01', '記錄手機簽署時間，且只留數字與時間符號（擋掉夾帶的標籤）');
 $pm2 = $pm; $pm2['items'] = '白米 20 包';

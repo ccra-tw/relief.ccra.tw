@@ -66,7 +66,7 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u, string $
     if (strlen($sigPng) < 100 || strlen($sigPng) > POC_SIG_MAX || substr($sigPng, 0, 8) !== "\x89PNG\r\n\x1a\n") return [null, '沒有收到簽名，請在簽名框簽名後再送出。'];
     if (!is_file($videoTmp) || filesize($videoTmp) < 1000) return [null, '沒有收到錄影，請先錄一段聲明。'];
     if (filesize($videoTmp) > POC_VIDEO_MAX) return [null, '錄影檔太大（上限 10 MB），請錄短一點。'];
-    if ($snapJpg !== '' && (strlen($snapJpg) > POC_SNAP_MAX || substr($snapJpg, 0, 3) !== "ÿØÿ")) return [null, '完成截圖格式不對或太大，請再送一次。'];
+    if ($snapJpg !== '' && (strlen($snapJpg) > POC_SNAP_MAX || substr($snapJpg, 0, 3) !== hex2bin('ffd8ff'))) return [null, '完成截圖格式不對或太大，請再送一次。'];
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($videoTmp);
     if (!isset(POC_VIDEO_TYPES[$mime])) return [null, '錄影格式不支援（' . $mime . '）。'];
     $video = (string)file_get_contents($videoTmp);

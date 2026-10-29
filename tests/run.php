@@ -591,7 +591,7 @@ $old = json_decode(file_get_contents(poc_dir() . "/$id/meta.json"), true);
 $old['created_at'] = date('c', time() - (POC_KEEP_DAYS + 1) * 86400);
 file_put_contents(poc_dir() . "/$id/meta.json", json_encode($old, JSON_UNESCAPED_UNICODE));
 ok(poc_purge_expired() === 1 && !is_dir(poc_dir() . "/$id"), '超過保存期限的雛形紀錄會被刪除（告知的保存期限要真的做到）');
-$jpg = "ÿØÿà" . str_repeat('j', 500);
+$jpg = hex2bin('ffd8ffe0') . str_repeat('j', 500);
 [$sid, $serr] = poc_save(['recipient' => '測試乙', 'items' => '罐頭 6 罐', 'consent' => '1'], $png, $mp4, $pu, $jpg);
 $sm = $sid ? poc_load($sid) : null;
 ok($sm && poc_read($sm, 'snap') === $jpg && poc_verify($sm)['snapshot'] === true && is_file(poc_dir() . "/$sid/snapshot.jpg.enc"), '完成截圖加密存檔，解密後逐位元相同、雜湊吻合');

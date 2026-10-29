@@ -13,6 +13,8 @@ page_head('錄影簽名（雛形）', $u);
 <style>
 label.chk{display:flex;flex-direction:row;align-items:flex-start;gap:10px;font-weight:700;cursor:pointer}
 label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!important;padding:0;flex:none;accent-color:var(--brand)}
+#f .fe{color:#c62828;font-weight:700;font-size:15px;margin-top:6px}
+#f .bad{outline:3px solid #c62828;outline-offset:2px;border-radius:6px}
 #stage{display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column}
 #stage.on{display:flex}
 #stage .cam{position:relative;flex:1 1 auto;overflow:hidden}
@@ -170,9 +172,21 @@ label.chk input{width:24px!important;height:24px;min-width:24px;margin:2px 0 0!i
 
   $('rec').onclick = async () => {
     // 熊哥 10-29：資料沒填就進簽名，送出才報錯又回不去 → 進入錄影前先檢查全部欄位
-    const miss = [['recipient', '請先填寫簽收人代稱'], ['items', '請先填寫物資品項與數量']].find(([n]) => !$('f').elements[n].value.trim());
-    if (miss) { $('rs').textContent = miss[1]; $('f').elements[miss[0]].focus(); return; }
-    if (!$('consent').checked) { $('rs').textContent = '請先勾選同意錄影'; $('consent').focus(); return; }
+    // 熊哥同日：「跳上去沒有在旁邊出現提醒字樣」→ 提示寫在那一欄正下方，欄位框變紅
+    document.querySelectorAll('#f .fe').forEach(x => x.remove());
+    document.querySelectorAll('#f .bad').forEach(x => x.classList.remove('bad'));
+    const miss = [['recipient', '↑ 請填寫簽收人代稱'], ['items', '↑ 請填寫物資品項與數量'], ['consent', '↑ 請唸告知事項給簽收人聽，對方同意後勾選這一項']]
+      .find(([n]) => { const el = $('f').elements[n]; return el.type === 'checkbox' ? !el.checked : !el.value.trim(); });
+    if (miss) {
+      const el = $('f').elements[miss[0]], tip = document.createElement('div');
+      tip.className = 'fe'; tip.textContent = miss[1];
+      (el.type === 'checkbox' ? el.closest('label') : el).classList.add('bad');
+      el.closest('p').appendChild(tip);
+      $('rs').textContent = miss[1].replace('↑ ', '');
+      el.scrollIntoView({ block: 'center' }); el.focus({ preventScroll: true });
+      el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => { tip.remove(); (el.type === 'checkbox' ? el.closest('label') : el).classList.remove('bad'); }, { once: true });
+      return;
+    }
     if (!window.MediaRecorder) { $('rs').textContent = '這個瀏覽器不支援錄影'; return; }
     $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…'; say('');
     open();

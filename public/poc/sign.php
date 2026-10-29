@@ -1,95 +1,129 @@
 <?php
-// 錄影簽名雛形：社工在現場用手機開這頁，簽收人手寫簽名＋錄一段聲明。說明見 lib/poc_sign.php。
+// 錄影簽名雛形：社工在現場用手機開這頁，簽收人在錄影畫面上直接手寫簽名＋唸聲明。說明見 lib/poc_sign.php。
+// 熊哥 2026-10-29 試用回饋：「強制要開啟攝影鏡頭，簽名直接壓在錄影上」→
+// 進頁面就要求開鏡頭（不開就不能簽）；簽名框疊在鏡頭畫面上，錄下來的影片同時有人臉、聲音與簽名的過程。
+// 同日再補：「簽完送出就結束錄影」→ 不另設「完成／重錄」，按送出即停止錄影並上傳。
 require __DIR__ . '/../../lib/boot.php';
 require __DIR__ . '/../../lib/poc_sign.php';
 $u = require_role(POC_ROLES);
 page_head('錄影簽名（雛形）', $u);
 ?>
-<h1>物資簽收：手寫簽名＋錄影聲明 <small class="tag">雛形</small></h1>
+<h1>物資簽收：錄影＋簽名 <small class="tag">雛形</small></h1>
 <p class="note">雛形測試用，請勿填真實姓名或個資；簽收人請用代稱（例如「測試甲」）。</p>
 <form id="f" onsubmit="return false">
   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+  <input type="hidden" name="statement" id="stmtv">
   <p><label>簽收人（代稱）<br><input type="text" name="recipient" maxlength="40" required></label></p>
   <p><label>物資品項與數量<br><textarea name="items" rows="2" maxlength="200" required placeholder="例：白米 2 包、罐頭 6 罐"></textarea></label></p>
 
-  <h2>1. 錄影聲明</h2>
-  <p>請簽收人對鏡頭唸：<b id="stmt">我是＿＿＿，今天收到中華基督教救助協會提供的物資，數量正確。</b></p>
-  <input type="hidden" name="statement" id="stmtv">
-  <video id="live" playsinline muted autoplay style="width:100%;max-width:420px;background:#000;border-radius:12px;display:none"></video>
-  <video id="play" playsinline controls style="width:100%;max-width:420px;border-radius:12px;display:none"></video>
-  <p>
-    <button type="button" id="cam">開啟鏡頭</button>
-    <button type="button" id="rec" disabled>開始錄影</button>
-    <button type="button" id="stop" disabled>停止</button>
-    <span id="rs" class="note"></span>
-  </p>
-
-  <h2>2. 手寫簽名</h2>
-  <canvas id="sig" width="600" height="220" style="width:100%;max-width:600px;height:auto;border:1px dashed #999;border-radius:12px;touch-action:none;background:#fff"></canvas>
-  <p><button type="button" id="clr">清除簽名</button></p>
-
   <details open><summary>蒐集錄影的告知事項（請唸給或給簽收人看）</summary>
-    <p class="note">中華基督教救助協會為確認物資已交付本人，於本次簽收時錄製您的影像與聲音。用途僅限物資簽收佐證與內部查核；只有經手同工與督導主管可調閱；保存 <?= POC_KEEP_DAYS ?> 天（雛形測試期）後刪除。您可以拒絕錄影，改以紙本簽收，不影響您領取物資；也可以事後要求刪除。</p>
+    <p class="note">中華基督教救助協會為確認物資已交付本人，於本次簽收時錄製您的影像、聲音與簽名過程。用途僅限物資簽收佐證與內部查核；只有經手同工與督導主管可調閱；保存 <?= POC_KEEP_DAYS ?> 天（雛形測試期）後刪除。您可以拒絕錄影，改以紙本簽收，不影響您領取物資；也可以事後要求刪除。</p>
   </details>
-  <p><label><input type="checkbox" name="consent" value="1"> 簽收人已了解上述告知事項，並同意本次錄影。</label></p>
-  <p><button type="button" id="go" class="primary">送出簽收</button> <span id="msg"></span></p>
+  <p><label><input type="checkbox" name="consent" value="1" id="consent"> 簽收人已了解上述告知事項，並同意本次錄影。</label></p>
+
+  <p id="camerr" class="note" style="color:#c62828;display:none"></p>
+  <div id="stage" style="position:relative;width:100%;max-width:480px;aspect-ratio:3/4;background:#000;border-radius:14px;overflow:hidden">
+    <video id="live" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video>
+    <canvas id="sig" width="600" height="300" style="position:absolute;left:0;right:0;bottom:0;width:100%;height:40%;background:rgba(255,255,255,.55);touch-action:none"></canvas>
+    <div style="position:absolute;left:8px;bottom:calc(40% + 6px);color:#fff;font-size:13px;text-shadow:0 1px 2px #000">↓ 在這裡簽名</div>
+    <div id="recdot" style="position:absolute;top:8px;left:8px;color:#fff;font-weight:700;text-shadow:0 1px 2px #000;display:none">● REC <span id="sec">0</span>s</div>
+  </div>
+  <p style="margin-top:8px">錄影時請簽收人唸：<b id="stmt">我是＿＿＿，今天收到中華基督教救助協會提供的物資，數量正確。</b>，並在畫面下方簽名。</p>
+  <p>
+    <button type="button" id="rec" disabled>開始錄影並簽名</button>
+    <button type="button" id="clr" disabled>清除簽名</button>
+    <span id="rs" class="note">正在開啟鏡頭…</span>
+  </p>
+  <p><button type="button" id="go" class="primary" disabled>簽完送出</button> <span id="msg"></span></p>
 </form>
 <p><a href="/poc/">← 雛形紀錄列表</a></p>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  let stream = null, rec = null, chunks = [], blob = null, timer = null, sec = 0;
-  const MAX = 30;
+  const MAX = 45, W = 480, H = 640;
+  let stream = null, rec = null, chunks = [], blob = null, timer = null, sec = 0, raf = 0, inked = false, composite = true;
+  const live = $('live'), sig = $('sig'), sx = sig.getContext('2d');
+  const out = document.createElement('canvas'); out.width = W; out.height = H; const ox = out.getContext('2d');
+  sx.lineWidth = 4; sx.lineCap = 'round'; sx.lineJoin = 'round'; sx.strokeStyle = '#111';
   const pick = () => ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
 
-  $('cam').onclick = async () => {
+  // 進頁面就開鏡頭；不開就不能簽（熊哥：強制要開啟攝影鏡頭）
+  async function openCam() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
-      $('live').srcObject = stream; $('live').style.display = 'block'; $('play').style.display = 'none';
-      $('rec').disabled = false; $('rs').textContent = '鏡頭已開啟';
-    } catch (e) { $('rs').textContent = '無法開啟鏡頭：' + e.message + '（請允許相機與麥克風權限）'; }
-  };
+      live.srcObject = stream; $('rec').disabled = false; $('rs').textContent = '鏡頭已開啟，按「開始錄影並簽名」';
+      $('camerr').style.display = 'none';
+    } catch (e) {
+      $('camerr').textContent = '必須開啟鏡頭與麥克風才能簽收（' + e.message + '）。請在瀏覽器設定允許後重新整理；簽收人不同意錄影請改用紙本簽收。';
+      $('camerr').style.display = 'block'; $('rs').textContent = '';
+    }
+  }
+  openCam();
+
+  // 合成：鏡頭畫面＋簽名區疊在同一張畫布上錄影，影片裡同時看得到人與簽名過程
+  function draw() {
+    const vw = live.videoWidth || 640, vh = live.videoHeight || 480, s = Math.max(W / vw, H / vh);
+    ox.save(); ox.translate(W, 0); ox.scale(-1, 1);
+    ox.drawImage(live, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s); ox.restore();
+    const sh = H * 0.4;
+    ox.fillStyle = 'rgba(255,255,255,.55)'; ox.fillRect(0, H - sh, W, sh);
+    ox.drawImage(sig, 0, H - sh, W, sh);
+    ox.fillStyle = '#fff'; ox.font = '14px sans-serif'; ox.fillText(new Date().toLocaleString('zh-TW'), 10, 22);
+    raf = requestAnimationFrame(draw);
+  }
+
+  const pos = e => { const r = sig.getBoundingClientRect(); return [(e.clientX - r.left) * sig.width / r.width, (e.clientY - r.top) * sig.height / r.height]; };
+  let drawing = false;
+  sig.onpointerdown = e => { if (!rec || rec.state !== 'recording') return; drawing = true; inked = true; sig.setPointerCapture(e.pointerId); sx.beginPath(); sx.moveTo(...pos(e)); };
+  sig.onpointermove = e => { if (drawing) { sx.lineTo(...pos(e)); sx.stroke(); } };
+  sig.onpointerup = sig.onpointercancel = () => { drawing = false; };
+  $('clr').onclick = () => { sx.clearRect(0, 0, sig.width, sig.height); inked = false; };
+
   $('rec').onclick = () => {
+    if (!$('consent').checked) { $('rs').textContent = '請先勾選同意錄影'; return; }
     if (!window.MediaRecorder) { $('rs').textContent = '這個瀏覽器不支援錄影'; return; }
-    chunks = []; blob = null; sec = 0;
+    chunks = []; blob = null; sec = 0; inked = false; sx.clearRect(0, 0, sig.width, sig.height);
+    let recStream = stream;
+    if (out.captureStream) {
+      draw();
+      recStream = new MediaStream([...out.captureStream(24).getVideoTracks(), ...stream.getAudioTracks()]);
+    } else composite = false;   // 不支援合成的瀏覽器：退回只錄鏡頭，簽名另存
     const type = pick();
-    rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 }, type ? { mimeType: type } : {}));
+    rec = new MediaRecorder(recStream, Object.assign({ videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 }, type ? { mimeType: type } : {}));
     rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     rec.onstop = () => {
+      cancelAnimationFrame(raf); clearInterval(timer);
       blob = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' });
-      $('play').src = URL.createObjectURL(blob); $('play').style.display = 'block'; $('live').style.display = 'none';
-      $('rs').textContent = '已錄 ' + sec + ' 秒（' + (blob.size / 1048576).toFixed(1) + ' MB），可播放確認；要重錄再按「開啟鏡頭」';
-      stream.getTracks().forEach(t => t.stop());
-      $('rec').disabled = true; $('stop').disabled = true; clearInterval(timer);
+      $('recdot').style.display = 'none'; $('clr').disabled = true;
+      upload();   // 簽完送出就結束錄影：停止與上傳是同一個動作
     };
     rec.start(1000);
-    $('rec').disabled = true; $('stop').disabled = false;
-    timer = setInterval(() => { sec++; $('rs').textContent = '錄影中 ' + sec + ' / ' + MAX + ' 秒'; if (sec >= MAX) rec.stop(); }, 1000);
+    $('rec').disabled = true; $('clr').disabled = false; $('go').disabled = false; $('recdot').style.display = 'block';
+    $('rs').textContent = '錄影中：請唸聲明，並在畫面下方簽名，簽完按「簽完送出」';
+    // 到上限仍未送出：停止錄影但不自動送出，避免沒簽名的影片被上傳
+    timer = setInterval(() => { sec++; $('sec').textContent = sec; if (sec >= MAX) { autoStopped = true; rec.stop(); } }, 1000);
   };
-  $('stop').onclick = () => { if (rec && rec.state === 'recording') rec.stop(); };
+  let autoStopped = false;
 
-  // 手寫簽名
-  const c = $('sig'), x = c.getContext('2d'); let drawing = false, inked = false;
-  x.lineWidth = 3; x.lineCap = 'round'; x.strokeStyle = '#111';
-  const pos = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
-  c.onpointerdown = e => { drawing = true; inked = true; c.setPointerCapture(e.pointerId); x.beginPath(); x.moveTo(...pos(e)); };
-  c.onpointermove = e => { if (drawing) { x.lineTo(...pos(e)); x.stroke(); } };
-  c.onpointerup = c.onpointercancel = () => { drawing = false; };
-  $('clr').onclick = () => { x.clearRect(0, 0, c.width, c.height); inked = false; };
+  $('go').onclick = () => {
+    if (rec && rec.state !== 'recording' && blob && inked) { $('go').disabled = true; upload(); return; }   // 上傳失敗後重送同一段錄影
+    if (!rec || rec.state !== 'recording') return;
+    if (!inked) { $('msg').textContent = '還沒簽名，請在畫面下方簽名後再送出'; return; }
+    $('go').disabled = true; rec.stop();
+  };
 
-  $('go').onclick = async () => {
-    const f = $('f');
-    if (!blob) { $('msg').textContent = '請先錄影'; return; }
-    if (!inked) { $('msg').textContent = '請先簽名'; return; }
+  async function upload() {
+    if (autoStopped && !$('go').disabled) { autoStopped = false; $('rs').textContent = '已達 ' + MAX + ' 秒上限，錄影停止；請按「開始錄影並簽名」重新錄'; $('rec').disabled = false; $('go').disabled = true; return; }
     $('stmtv').value = $('stmt').textContent;
-    const fd = new FormData(f);
-    fd.append('signature', await new Promise(r => c.toBlob(r, 'image/png')), 'signature.png');
+    const fd = new FormData($('f'));
+    fd.append('signature', await new Promise(r => sig.toBlob(r, 'image/png')), 'signature.png');
     fd.append('video', blob, 'video.' + (blob.type.includes('mp4') ? 'mp4' : 'webm'));
+    fd.append('composite', composite ? '1' : '0');
     $('go').disabled = true; $('msg').textContent = '上傳中…';
     try {
       const res = await fetch('/poc/save.php', { method: 'POST', body: fd, credentials: 'same-origin' });
       const j = await res.json();
-      if (j.id) location.href = '/poc/view.php?id=' + j.id;
+      if (j.id) { stream && stream.getTracks().forEach(t => t.stop()); location.href = '/poc/view.php?id=' + j.id; }
       else { $('msg').textContent = j.error || '送出失敗'; $('go').disabled = false; }
     } catch (e) { $('msg').textContent = '送出失敗：' + e.message; $('go').disabled = false; }
   };

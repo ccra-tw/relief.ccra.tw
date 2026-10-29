@@ -562,11 +562,12 @@ ok($id === null && str_contains((string)$err, '同意'), '沒勾同意錄影就�
 $txt = tempnam(sys_get_temp_dir(), 'poc'); file_put_contents($txt, str_repeat('not a video ', 200));
 [$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1'], $png, $txt, $pu);
 ok($id === null && str_contains((string)$err, '格式'), '不是影片的檔案被擋下');
-[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1', 'statement' => '我是測試甲'], $png, $mp4, $pu);
+[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1', 'statement' => '我是測試甲', 'composite' => '1'], $png, $mp4, $pu);
 ok(poc_valid_id($id) && $err === null, '簽名＋錄影＋同意可以存檔');
 $pm = poc_load((string)$id);
 $pv = $pm ? poc_verify($pm) : [];
 ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'video' => true, 'seal' => true], '存檔後雜湊與存證碼都吻合');
+ok($pm && $pm['composite'] === true, '記錄簽名有合成進錄影');
 $pm2 = $pm; $pm2['items'] = '白米 20 包';
 ok(poc_verify($pm2)['seal'] === false, '內容被改（數量 2→20）存證碼就對不上');
 file_put_contents(poc_dir() . "/$id/" . $pm['video_file'], 'x', FILE_APPEND);

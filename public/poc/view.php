@@ -16,9 +16,10 @@ echo '<tr><th>簽收人（代稱）</th><td>' . h($m['recipient']) . '</td></tr>
 echo '<tr><th>物資</th><td>' . nl2br(h($m['items'])) . '</td></tr>';
 echo '<tr><th>聲明內容</th><td>' . h($m['statement']) . '</td></tr>';
 echo '<tr><th>經手同工</th><td>' . h($m['worker']) . '</td></tr>';
+echo '<tr><th>簽名合成進錄影</th><td>' . (!empty($m['composite']) ? '是（影片裡看得到簽名過程）' : '否（此裝置不支援合成，簽名另存）') . '</td></tr>';
 echo '<tr><th>錄影同意</th><td>' . ($m['consent'] ? '已勾選同意' : '—') . '</td></tr>';
 echo '</table>';
-echo '<h2>錄影聲明</h2><video src="/poc/file.php?id=' . h($m['id']) . '&amp;k=video" controls playsinline style="width:100%;max-width:420px;border-radius:12px"></video>';
+echo '<h2>錄影（聲明＋簽名過程）</h2><video src="/poc/file.php?id=' . h($m['id']) . '&amp;k=video" controls playsinline style="width:100%;max-width:420px;border-radius:12px"></video>';
 echo '<h2>手寫簽名</h2><img src="/poc/file.php?id=' . h($m['id']) . '&amp;k=sig" alt="簽名" style="width:100%;max-width:600px;border:1px solid #ddd;border-radius:12px;background:#fff">';
 echo '<h2>存證</h2><table class="kv">';
 echo '<tr><th>存證碼</th><td><code>' . h($m['seal']) . '</code><br>' . $ok($v['seal']) . '</td></tr>';

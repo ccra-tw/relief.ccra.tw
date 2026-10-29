@@ -56,6 +56,7 @@ function poc_save(array $f, string $sigPng, string $videoTmp, array $u): array {
         'worker' => $u['display_name'] ?? $u['username'] ?? '',
         'worker_id' => $u['id'] ?? null,
         'consent' => true,
+        'composite' => ($f['composite'] ?? '') === '1',   // 簽名是否合成進錄影畫面（熊哥 10-29：簽名直接壓在錄影上）
         'signature_sha256' => hash_file('sha256', "$dir/signature.png"),
         'video_file' => $vname,
         'video_mime' => $mime,

@@ -3,6 +3,7 @@
 // 熊哥 2026-10-29 試用回饋：「強制要開啟攝影鏡頭，簽名直接壓在錄影上」→
 // 進頁面就要求開鏡頭（不開就不能簽）；簽名框疊在鏡頭畫面上，錄下來的影片同時有人臉、聲音與簽名的過程。
 // 同日再補：「簽完送出就結束錄影」→ 不另設「完成／重錄」，按送出即停止錄影並上傳。
+// 再補：「開始錄影簽名才需要開鏡頭，簽完送出就關閉錄影」→ 按開始才開鏡頭（拒絕仍不能簽），錄影一停就關鏡頭。
 require __DIR__ . '/../../lib/boot.php';
 require __DIR__ . '/../../lib/poc_sign.php';
 $u = require_role(POC_ROLES);
@@ -30,9 +31,9 @@ page_head('錄影簽名（雛形）', $u);
   </div>
   <p style="margin-top:8px">錄影時請簽收人唸：<b id="stmt">我是＿＿＿，今天收到中華基督教救助協會提供的物資，數量正確。</b>，並在畫面下方簽名。</p>
   <p>
-    <button type="button" id="rec" disabled>開始錄影並簽名</button>
+    <button type="button" id="rec">開始錄影並簽名</button>
     <button type="button" id="clr" disabled>清除簽名</button>
-    <span id="rs" class="note">正在開啟鏡頭…</span>
+    <span id="rs" class="note">勾選同意後，按「開始錄影並簽名」會開啟鏡頭</span>
   </p>
   <p><button type="button" id="go" class="primary" disabled>簽完送出</button> <span id="msg"></span></p>
 </form>
@@ -51,14 +52,16 @@ page_head('錄影簽名（雛形）', $u);
   async function openCam() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true });
-      live.srcObject = stream; $('rec').disabled = false; $('rs').textContent = '鏡頭已開啟，按「開始錄影並簽名」';
-      $('camerr').style.display = 'none';
+      live.srcObject = stream; $('camerr').style.display = 'none';
+      await new Promise(r => live.readyState >= 2 ? r() : (live.onloadeddata = r));
+      return true;
     } catch (e) {
-      $('camerr').textContent = '必須開啟鏡頭與麥克風才能簽收（' + e.message + '）。請在瀏覽器設定允許後重新整理；簽收人不同意錄影請改用紙本簽收。';
+      $('camerr').textContent = '必須開啟鏡頭與麥克風才能簽收（' + e.message + '）。請在瀏覽器設定允許後再按一次；簽收人不同意錄影請改用紙本簽收。';
       $('camerr').style.display = 'block'; $('rs').textContent = '';
+      return false;
     }
   }
-  openCam();
+  const closeCam = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; live.srcObject = null; };
 
   // 合成：鏡頭畫面＋簽名區疊在同一張畫布上錄影，影片裡同時看得到人與簽名過程
   function draw() {
@@ -79,9 +82,11 @@ page_head('錄影簽名（雛形）', $u);
   sig.onpointerup = sig.onpointercancel = () => { drawing = false; };
   $('clr').onclick = () => { sx.clearRect(0, 0, sig.width, sig.height); inked = false; };
 
-  $('rec').onclick = () => {
+  $('rec').onclick = async () => {
     if (!$('consent').checked) { $('rs').textContent = '請先勾選同意錄影'; return; }
     if (!window.MediaRecorder) { $('rs').textContent = '這個瀏覽器不支援錄影'; return; }
+    $('rec').disabled = true; $('rs').textContent = '正在開啟鏡頭…';
+    if (!(await openCam())) { $('rec').disabled = false; return; }
     chunks = []; blob = null; sec = 0; inked = false; sx.clearRect(0, 0, sig.width, sig.height);
     let recStream = stream;
     if (out.captureStream) {
@@ -95,6 +100,7 @@ page_head('錄影簽名（雛形）', $u);
       cancelAnimationFrame(raf); clearInterval(timer);
       blob = new Blob(chunks, { type: rec.mimeType || type || 'video/webm' });
       $('recdot').style.display = 'none'; $('clr').disabled = true;
+      closeCam();   // 簽完送出就關閉錄影：停止錄影的同時關掉鏡頭與麥克風
       upload();   // 簽完送出就結束錄影：停止與上傳是同一個動作
     };
     rec.start(1000);
@@ -123,7 +129,7 @@ page_head('錄影簽名（雛形）', $u);
     try {
       const res = await fetch('/poc/save.php', { method: 'POST', body: fd, credentials: 'same-origin' });
       const j = await res.json();
-      if (j.id) { stream && stream.getTracks().forEach(t => t.stop()); location.href = '/poc/view.php?id=' + j.id; }
+      if (j.id) location.href = '/poc/view.php?id=' + j.id;
       else { $('msg').textContent = j.error || '送出失敗'; $('go').disabled = false; }
     } catch (e) { $('msg').textContent = '送出失敗：' + e.message; $('go').disabled = false; }
   };

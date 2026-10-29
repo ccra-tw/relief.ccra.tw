@@ -6,6 +6,7 @@ putenv('RELIEF_TEST_DIR=' . __DIR__ . '/fixtures/directory.json');   // 名錄 A
 putenv('RELIEF_TEST_SECRET=1');                                       // 個資加密用測試金鑰
 $UP = sys_get_temp_dir() . '/relief-test-uploads-' . getmypid();
 putenv("RELIEF_UPLOAD_DIR=$UP");
+putenv("RELIEF_POC_DIR=" . sys_get_temp_dir() . "/relief-test-poc-" . getmypid());   // 錄影簽名雛形的測試目錄
 require __DIR__ . '/../lib/boot.php';
 $ROOT = realpath(__DIR__ . '/..');
 $fail = 0;
@@ -549,6 +550,35 @@ ok(str_contains($out, '已過期') && !str_contains($out, 'TypeError'), '網址 
 ok(!str_contains($out, '已過期') && str_contains($out, 'T1-A-2026-0901'), '沒有代碼（第一次進來）照常列出');
 [, $out] = page('admin/audit.php', 'admin@example.test', [], ['f' => '0123456789ab']);
 ok(str_contains($out, '已過期') && str_contains($out, 'value=""'), '稽核紀錄的過期代碼提示重新搜尋、搜尋框清空');
+
+echo "錄影簽名雛形\n";
+require_once "$ROOT/lib/poc_sign.php";
+$png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==') . str_repeat("\0", 200);
+$mp4 = tempnam(sys_get_temp_dir(), 'poc');
+file_put_contents($mp4, "\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41" . str_repeat("\0", 4000));
+$pu = ['id' => 1, 'display_name' => '測試同工'];
+[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包'], $png, $mp4, $pu);
+ok($id === null && str_contains((string)$err, '同意'), '沒勾同意錄影就不能送出');
+$txt = tempnam(sys_get_temp_dir(), 'poc'); file_put_contents($txt, str_repeat('not a video ', 200));
+[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1'], $png, $txt, $pu);
+ok($id === null && str_contains((string)$err, '格式'), '不是影片的檔案被擋下');
+[$id, $err] = poc_save(['recipient' => '測試甲', 'items' => '白米 2 包', 'consent' => '1', 'statement' => '我是測試甲'], $png, $mp4, $pu);
+ok(poc_valid_id($id) && $err === null, '簽名＋錄影＋同意可以存檔');
+$pm = poc_load((string)$id);
+$pv = $pm ? poc_verify($pm) : [];
+ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'video' => true, 'seal' => true], '存檔後雜湊與存證碼都吻合');
+$pm2 = $pm; $pm2['items'] = '白米 20 包';
+ok(poc_verify($pm2)['seal'] === false, '內容被改（數量 2→20）存證碼就對不上');
+file_put_contents(poc_dir() . "/$id/" . $pm['video_file'], 'x', FILE_APPEND);
+ok(poc_verify($pm)['video'] === false, '錄影檔被動過，錄影雜湊就對不上');
+[$c, $o] = page('poc/index.php', 'church-demo');
+ok(str_contains($o, '沒有這個功能的權限'), '教會帳號不能進錄影簽名雛形');
+[$c, $o] = page('poc/index.php', 'worker@example.test');
+ok(str_contains($o, '測試甲') && str_contains($o, '雛形'), '同工帳號看得到雛形紀錄列表');
+$old = json_decode(file_get_contents(poc_dir() . "/$id/meta.json"), true);
+$old['created_at'] = date('c', time() - (POC_KEEP_DAYS + 1) * 86400);
+file_put_contents(poc_dir() . "/$id/meta.json", json_encode($old, JSON_UNESCAPED_UNICODE));
+ok(poc_purge_expired() === 1 && !is_dir(poc_dir() . "/$id"), '超過保存期限的雛形紀錄會被刪除（告知的保存期限要真的做到）');
 
 echo "隔離\n";
 ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $prodBefore, '正式 schema 的 audit_log 沒有被測試寫入');

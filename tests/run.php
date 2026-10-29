@@ -570,7 +570,8 @@ ok($pm && $pm['video_mime'] === 'video/mp4' && $pv === ['signature' => true, 'vi
 ok($pm && $pm['composite'] === true, '記錄簽名有合成進錄影');
 $pm2 = $pm; $pm2['items'] = '白米 20 包';
 ok(poc_verify($pm2)['seal'] === false, '內容被改（數量 2→20）存證碼就對不上');
-ok(is_file(poc_dir() . "/$id/signature.png.enc") && !is_file(poc_dir() . "/$id/signature.png") && substr(file_get_contents(poc_dir() . "/$id/signature.png.enc"), 0, 8) !== "PNG
+ok(is_file(poc_dir() . "/$id/signature.png.enc") && !is_file(poc_dir() . "/$id/signature.png") && substr(file_get_contents(poc_dir() . "/$id/signature.png.enc"), 0, 8) !== "PNG
+
 
 " && !str_contains(file_get_contents(poc_dir() . "/$id/" . $pm['video_file'] . '.enc'), 'ftypisom'), '簽名與錄影加密存放，磁碟上看不到原始內容');
 ok(poc_read($pm, 'sig') === $png, '解密後簽名與原檔逐位元相同');
@@ -595,8 +596,8 @@ ok((int)$db->query("SELECT count(*) FROM app.audit_log")->fetchColumn() === $pro
 $leak = shell_exec('grep -rnE "password *= *[^ ]|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}" ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/sql") . ' 2>/dev/null');
 ok(trim((string)$leak) === '', 'lib／public／sql 裡沒有密碼字串或 IP 位址');
 // "$變數：" 這種寫法 PHP 會把全形字元當成變數名稱的一部分（2026-10-15 踩到），一律要寫成 {$變數}
-$interp = shell_exec('grep -rnP ' . escapeshellarg('\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]') . ' --include=*.php ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . " | grep -vP '\\{\\\$[A-Za-z_][^}]*\\}'");
-ok(trim((string)$interp) === '', '字串裡的變數後面緊接中文時都有用 {} 包起來');
+$interp = shell_exec('grep -rnP ' . escapeshellarg('\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]') . ' --include=*.php ' . escapeshellarg("$ROOT/lib") . ' ' . escapeshellarg("$ROOT/public") . ' ' . escapeshellarg("$ROOT/bin") . " | grep -vP '\\{\\\$[A-Za-z_][^}]*\\}'");
+ok(trim((string)$interp) === '', '字串裡的變數後面緊接中文時都有用 {} 包起來（lib／public／bin）');
 
 echo $fail ? "\n❌ $fail 項失敗\n" : "\n全部通過\n";
 exit($fail ? 1 : 0);

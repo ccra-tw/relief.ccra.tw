@@ -5,4 +5,4 @@ require __DIR__ . '/../lib/boot.php';
 require __DIR__ . '/../lib/poc_sign.php';
 $day = $argv[1] ?? date('Y-m-d', strtotime('yesterday'));
 if (!preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $day)) { fwrite(STDERR, "日期格式要 YYYY-MM-DD\n"); exit(2); }
-echo date('c') . " poc_digest $day：" . poc_digest($day) . " 筆\n";
+echo date('c') . " poc_digest {$day}：" . poc_digest($day) . " 筆\n";

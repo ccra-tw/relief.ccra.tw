@@ -80,6 +80,39 @@ function church_region(string $oid): ?int {
     $r = $s->fetchColumn(); return $r === false ? null : (int)$r;
 }
 
+// ---- 教會紀錄（日期／評估／備註，可多筆；只增不改） ----
+// 看得到這間教會的同工才能看、才能記：服管組與管理者全部，區辦限自己區辦的教會；教會帳號一律不行
+function church_note_allowed(array $u, string $oid): bool {
+    if (!in_array($u['role'], CHURCH_ROLES, true)) return false;
+    $rid = church_region($oid);
+    if ($rid === null) return false;
+    if (in_array($u['role'], ['hq_worker', 'hq_head', 'admin'], true)) return true;
+    return (int)$u['region_id'] === $rid;
+}
+
+function church_note_add(array $u, string $oid, array $f): ?string {
+    if (!church_note_allowed($u, $oid)) return '只能為您看得到的已綁定教會記錄。';
+    $d = trim((string)($f['note_date'] ?? ''));
+    $dt = DateTime::createFromFormat('!Y-m-d', $d);
+    if (!$dt || $dt->format('Y-m-d') !== $d) return '日期格式不正確。';
+    if ($dt > new DateTime('tomorrow')) return '日期不能是未來。';
+    $a = trim((string)($f['assessment'] ?? ''));
+    if ($a === '') return '評估必填。';
+    if (mb_strlen($a) > 500) return '評估限 500 字。';
+    $r = trim((string)($f['remark'] ?? ''));
+    if (mb_strlen($r) > 2000) return '備註限 2000 字。';
+    $s = rdb()->prepare('INSERT INTO church_note (church_oid, note_date, assessment, remark, created_by) VALUES (?,?,?,?,?) RETURNING id');
+    $s->execute([$oid, $d, $a, $r === '' ? null : $r, $u['id']]);
+    audit('create', 'church_note', $s->fetchColumn(), ['church_oid' => $oid, 'note_date' => $d]);
+    return null;
+}
+
+function church_notes(string $oid): array {
+    $s = rdb()->prepare('SELECT n.*, u.display_name AS by_name FROM church_note n JOIN app_user u ON u.id = n.created_by WHERE n.church_oid = ? ORDER BY n.note_date DESC, n.id DESC');
+    $s->execute([$oid]);
+    return $s->fetchAll();
+}
+
 // ---- 教會帳號申請 ----
 function account_request_create(array $u, array $f): ?string {
     if ($u['role'] !== 'region_worker') return '教會帳號申請由區辦社工提出。';

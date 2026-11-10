@@ -129,6 +129,25 @@ $addId = (int)$db->query("SELECT id FROM church_add_request ORDER BY id DESC LIM
 ok(!church_can_apply('900003'), '名錄核可前仍不能申請');
 ok(church_add_approved($W, $addId, '900003') === null && church_can_apply('900003'), '名錄核可並填回 oid 後可以申請');
 
+echo "教會紀錄\n";
+ok(church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => '測試評估：合作順利', 'remark' => '測試備註']) === null, '區辦社工為自己區辦的教會新增紀錄');
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => '  ']), '評估必填'), '評估空白擋下');
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => '2026-02-30', 'assessment' => 'x']), '日期格式'), '不存在的日期擋下');
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => date('Y-m-d', strtotime('+3 days')), 'assessment' => 'x']), '未來'), '未來日期擋下');
+ok(str_contains((string)church_note_add($H2, '900001', ['note_date' => date('Y-m-d'), 'assessment' => 'x']), '看得到'), '別區主任不能記別區教會');
+ok(church_note_add(load_user('email', 'admin@example.test'), '900001', ['note_date' => '2026-01-05', 'assessment' => '測試較早紀錄']) === null, '管理者可記任何已綁定教會');
+ok(str_contains((string)church_note_add($W, '999999', ['note_date' => date('Y-m-d'), 'assessment' => 'x']), '看得到'), '未綁定的教會不能記');
+$cn = church_notes('900001');
+ok(count($cn) === 2 && $cn[0]['assessment'] === '測試評估：合作順利' && $cn[1]['note_date'] === '2026-01-05' && $cn[0]['by_name'] === '測試區辦社工', '紀錄依日期新到舊，帶記錄人');
+[$c, $o] = page('churches/notes.php', 'worker@example.test', [], ['oid' => '900001']);
+ok($c === 0 && str_contains($o, '測試評估：合作順利') && str_contains($o, '歷次紀錄（2 筆）'), '紀錄頁列出歷次紀錄');
+[$c, $o] = page('churches/notes.php', 'head2@example.test', [], ['oid' => '900001']);
+ok(str_contains($o, '找不到這間教會'), '別區主任開不到別區教會的紀錄頁');
+[$c, $o] = page('churches/notes.php', 'church-demo', [], ['oid' => '900001']);
+ok(!str_contains($o, '測試評估'), '教會帳號看不到紀錄');
+[$c, $o] = page('churches/index.php', 'worker@example.test');
+ok(str_contains($o, '紀錄（2）'), '已綁定教會列表顯示紀錄筆數');
+
 echo "教會帳號申請（#4）\n";
 ok(str_contains((string)account_request_create($H1, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => '測試同工', 'role' => 'church_staff']), '區辦社工提出'), '只有區辦社工能提出帳號申請');
 ok(account_request_create($W, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => '測試同工', 'role' => 'church_staff', 'email' => 'church@example.test']) === null, '區辦社工提出帳號申請');

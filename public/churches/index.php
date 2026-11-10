@@ -17,7 +17,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 [$w, $p] = scope_sql($u, 'a.region_id');
 $areas = $db->prepare("SELECT a.id, a.code, a.name, r.code AS rcode FROM area a JOIN region r ON r.id = a.region_id WHERE a.active AND $w ORDER BY r.code, a.code"); $areas->execute($p); $areas = $areas->fetchAll();
-$churches = $db->prepare("SELECT c.*, a.code AS acode, r.code AS rcode FROM church c JOIN area a ON a.id = c.area_id JOIN region r ON r.id = a.region_id WHERE $w ORDER BY c.name"); $churches->execute($p); $churches = $churches->fetchAll();
+$churches = $db->prepare("SELECT c.*, a.code AS acode, r.code AS rcode, (SELECT count(*) FROM church_note n WHERE n.church_oid = c.oid) AS n_notes FROM church c JOIN area a ON a.id = c.area_id JOIN region r ON r.id = a.region_id WHERE $w ORDER BY c.name"); $churches->execute($p); $churches = $churches->fetchAll();
 $adds = $db->prepare("SELECT x.* FROM church_add_request x JOIN area a ON a.id = x.area_id WHERE x.status = 'submitted' AND $w ORDER BY x.id"); $adds->execute($p); $adds = $adds->fetchAll();
 [$w2, $p2] = scope_sql($u, 'q.region_id');
 $reqs = $db->prepare("SELECT q.*, c.name AS cname FROM account_request q JOIN church c ON c.oid = q.church_oid WHERE q.status = 'pending' AND $w2 ORDER BY q.id"); $reqs->execute($p2); $reqs = $reqs->fetchAll();
@@ -38,8 +38,8 @@ if ($found !== null) {
         echo '</table>'; }
 }
 
-echo '<h2>已綁定的教會</h2><table><tr><th>名稱</th><th>oid</th><th>區域</th></tr>';
-foreach ($churches as $c) echo '<tr><td>' . h($c['name']) . '</td><td>' . h($c['oid']) . '</td><td>' . h("{$c['rcode']}-{$c['acode']}") . '</td><td><a href="/churches/account.php?oid=' . h($c['oid']) . '">收款帳戶' . ($c['account_no'] ? '' : '（未設定）') . '</a></td></tr>';
+echo '<h2>已綁定的教會</h2><table><tr><th>名稱</th><th>oid</th><th>區域</th><th>綁定日期</th><th></th><th></th></tr>';
+foreach ($churches as $c) echo '<tr><td>' . h($c['name']) . '</td><td>' . h($c['oid']) . '</td><td>' . h("{$c['rcode']}-{$c['acode']}") . '</td><td>' . h(date('Y-m-d', strtotime($c['bound_at']))) . '</td><td><a href="/churches/account.php?oid=' . h($c['oid']) . '">收款帳戶' . ($c['account_no'] ? '' : '（未設定）') . '</a></td><td><a href="/churches/notes.php?oid=' . h($c['oid']) . '">紀錄（' . (int)$c['n_notes'] . '）</a></td></tr>';
 echo '</table>';
 
 echo "<h2>名錄新增申請（不在名錄的教會）</h2><form method=post class=card><input type=hidden name=csrf value=\"$tok\"><input type=hidden name=act value=add>";

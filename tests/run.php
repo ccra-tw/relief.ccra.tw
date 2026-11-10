@@ -147,6 +147,21 @@ ok(str_contains($o, '找不到這間教會'), '別區主任開不到別區教會
 ok(!str_contains($o, '測試評估'), '教會帳號看不到紀錄');
 [$c, $o] = page('churches/index.php', 'worker@example.test');
 ok(str_contains($o, '紀錄（2）'), '已綁定教會列表顯示紀錄筆數');
+$nNote = fn() => (int)$db->query("SELECT count(*) FROM church_note WHERE church_oid='900001'")->fetchColumn();
+$n0 = $nNote();
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => date('Y-m-d', strtotime('+1 day')), 'assessment' => 'x']), '未來') && $nNote() === $n0, '明天的日期擋下且筆數不變（邊界）');
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => str_repeat('評', 501)]), '500') && $nNote() === $n0, '評估 501 字擋下');
+ok(str_contains((string)church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => 'x', 'remark' => str_repeat('備', 2001)]), '2000') && $nNote() === $n0, '備註 2001 字擋下');
+ok(church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => str_repeat('評', 500), 'remark' => str_repeat('備', 2000)]) === null && $nNote() === $n0 + 1, '評估 500 字、備註 2000 字（上限）可存');
+ok(church_note_add($W, '900001', ['note_date' => date('Y-m-d'), 'assessment' => '<script>alert(1)</script>', 'remark' => "<img src=x onerror=alert(2)>\n第二行"]) === null, '含 HTML 的評估可存（原樣存）');
+[$c, $o] = page('churches/notes.php', 'worker@example.test', [], ['oid' => '900001']);
+ok(str_contains($o, '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($o, '<script>alert(1)') && !str_contains($o, '<img src=x') && str_contains($o, '&lt;img src=x onerror=alert(2)&gt;<br />'), '評估／備註輸出跳脫，換行轉 <br> 不會帶入標籤');
+$ins->execute([null, 'note-pastor', password_hash('x', PASSWORD_DEFAULT), '測試紀錄牧者', 'church_pastor', null]);
+[$c, $o] = page('churches/notes.php', 'note-pastor', [], ['oid' => '900001']);
+ok(!str_contains($o, '測試評估') && str_contains($o, '沒有這個功能的權限'), '教會牧者也進不了紀錄頁');
+$n1 = $nNote();
+[$c, $o] = page('churches/notes.php', 'worker@example.test', ['note_date' => date('Y-m-d', strtotime('+1 day')), 'assessment' => '保留這段評估', 'remark' => '保留這段備註'], ['oid' => '900001']);
+ok(str_contains($o, '日期不能是未來') && str_contains($o, '>保留這段評估</textarea>') && str_contains($o, '>保留這段備註</textarea>') && $nNote() === $n1, '送出失敗時評估與備註保留、不寫入');
 
 echo "教會帳號申請（#4）\n";
 ok(str_contains((string)account_request_create($H1, ['church_oid' => '900001', 'username' => 'grace01', 'display_name' => '測試同工', 'role' => 'church_staff']), '區辦社工提出'), '只有區辦社工能提出帳號申請');

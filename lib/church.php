@@ -95,7 +95,7 @@ function church_note_add(array $u, string $oid, array $f): ?string {
     $d = trim((string)($f['note_date'] ?? ''));
     $dt = DateTime::createFromFormat('!Y-m-d', $d);
     if (!$dt || $dt->format('Y-m-d') !== $d) return '日期格式不正確。';
-    if ($dt > new DateTime('tomorrow')) return '日期不能是未來。';
+    if ($dt > new DateTime('today')) return '日期不能是未來。';
     $a = trim((string)($f['assessment'] ?? ''));
     if ($a === '') return '評估必填。';
     if (mb_strlen($a) > 500) return '評估限 500 字。';

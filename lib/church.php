@@ -96,14 +96,19 @@ function church_note_add(array $u, string $oid, array $f): ?string {
     $dt = DateTime::createFromFormat('!Y-m-d', $d);
     if (!$dt || $dt->format('Y-m-d') !== $d) return '日期格式不正確。';
     if ($dt > new DateTime('today')) return '日期不能是未來。';
+    $k = (string)($f['contact_kind'] ?? '');
+    if (!in_array($k, ['訪視', '電訪'], true)) return '請選訪視或電訪。';
+    $ct = trim((string)($f['contact_content'] ?? ''));
+    if ($ct === '') return '訪視／電訪內容必填。';
+    if (mb_strlen($ct) > 2000) return '訪視／電訪內容限 2000 字。';
     $a = trim((string)($f['assessment'] ?? ''));
     if ($a === '') return '評估必填。';
     if (mb_strlen($a) > 500) return '評估限 500 字。';
     $r = trim((string)($f['remark'] ?? ''));
     if (mb_strlen($r) > 2000) return '備註限 2000 字。';
-    $s = rdb()->prepare('INSERT INTO church_note (church_oid, note_date, assessment, remark, created_by) VALUES (?,?,?,?,?) RETURNING id');
-    $s->execute([$oid, $d, $a, $r === '' ? null : $r, $u['id']]);
-    audit('create', 'church_note', $s->fetchColumn(), ['church_oid' => $oid, 'note_date' => $d]);
+    $s = rdb()->prepare('INSERT INTO church_note (church_oid, note_date, contact_kind, contact_content, assessment, remark, created_by) VALUES (?,?,?,?,?,?,?) RETURNING id');
+    $s->execute([$oid, $d, $k, $ct, $a, $r === '' ? null : $r, $u['id']]);
+    audit('create', 'church_note', $s->fetchColumn(), ['church_oid' => $oid, 'note_date' => $d, 'contact_kind' => $k]);
     return null;
 }
 
